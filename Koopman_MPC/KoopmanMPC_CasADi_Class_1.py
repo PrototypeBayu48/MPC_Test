@@ -357,8 +357,8 @@ class Quad_KoopmanMPC_Euler:
         self.max_tz = 2*self.cq*self.max_w2
 
         self.dt = dt                    # time between steps in seconds
-        #self.N = 25                     # number of look ahead steps
-        self.N = 10                     # number of look ahead steps
+        self.N = 25                     # number of look ahead steps
+        #self.N = 10                     # number of look ahead steps
 
         self.Amat = KoopMat[0,:,:]
         self.B1mat = KoopMat[1,:,:]

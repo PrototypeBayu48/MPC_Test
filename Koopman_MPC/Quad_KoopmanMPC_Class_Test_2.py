@@ -54,7 +54,7 @@ def simulate_koop(state_init, u, koopmat, basis, xscal, uscal):
 
 
 def defkbf(n,m):
-    return CKBF_STK([n, m, 12+1], 100*np.ones(2), True, jax.nn.swish)
+    return CKBF_STK([n, m, 13+1], 100*np.ones(2), True, jax.nn.swish)
 
 n = 9
 m = 4
