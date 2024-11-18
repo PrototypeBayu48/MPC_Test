@@ -16,7 +16,7 @@ import jax
 
 import pickle
 
-def simulate_euler(step_horizon, t0, state_init_quat, u):
+def simulate_euler_quat(step_horizon, t0, state_init_quat, u):
 
     state_init = np.zeros(9)
     state_init[:3] = state_init_quat[:3]
@@ -41,6 +41,23 @@ def simulate_euler(step_horizon, t0, state_init_quat, u):
     next_state_quat[7:] = next_state_euler[6:]
 
     return next_state_quat, u_ctrl
+
+def simulate_euler(step_horizon, state_init, u):
+
+    #u_ctrl = np.squeeze(u[:,1])
+    u_ctrl = np.squeeze(u)
+
+    def lin_func(t, x):
+        xdot = [x[6], x[7], x[8], u_ctrl[1] ,u_ctrl[2], u_ctrl[3],
+                ((cos(x[5])*sin(x[4])*cos(x[3]) + sin(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
+                ((sin(x[5])*sin(x[4])*cos(x[3]) - cos(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
+                -gravity + ((cos(x[4])*cos(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust)]
+        return xdot
+    soln = solve_ivp(lin_func, [0.0, step_horizon], np.squeeze(state_init), t_eval = [step_horizon])
+    xnext = soln.y
+    next_state_euler =  np.squeeze(xnext)
+
+    return next_state_euler
 
 def defkbf(n,m):
     return CKBF_STK([n, m, 13+1], 100*np.ones(2), True, jax.nn.swish)
@@ -83,12 +100,12 @@ u_train = np.load('rotrate_mod_u_1.npy')
 model = 'BLO'
 
 if model == 'BLO':
-    koopmat_blo = np.load('matrices_rotrate_crazyflie_blo_1.npy')
-    with open('net_rotrate_crazyflie_blo_1.pkl','rb') as fp:
+    koopmat_blo = np.load('matrices_rotrate_crazyflie_blo_4.npy')
+    with open('net_rotrate_crazyflie_blo_4.pkl','rb') as fp:
         params_blo = pickle.load(fp)
 
-    xscal = np.load('xscal_rotrate_crazyflie_blo_1.npy')
-    uscal = np.load('uscal_rotrate_crazyflie_blo_1.npy')
+    xscal = np.load('xscal_rotrate_crazyflie_blo_4.npy')
+    uscal = np.load('uscal_rotrate_crazyflie_blo_4.npy')
 
     kbf = defkbf(n,m)
     def basis_blo(x):
@@ -117,8 +134,9 @@ print(fltsel)
 print(startsel)
 
 #testlen = int((5/dt) + 1)
-#testlen = 25
-testlen = 5
+testlen = 25
+#testlen = 5
+#testlen = 100
 
 tarray = dt*np.arange(len(x_train_eul[0,:testlen,0]))
 
@@ -128,14 +146,19 @@ u_ref = u_train[fltsel,startsel:startsel+(testlen-1),:]
 
 uref_norm = (u_ref - uscal[:,1])/uscal[:,0]
 
+x_sim_eul = np.zeros((testlen,n))
+
 zarray = np.zeros((testlen,nz))
 
 xstart_pos = (x_ref_eul[0,:] - xscal[:,1])/xscal[:,0]
+
+x_sim_eul[0,:] = x_ref_eul[0,:]
 
 zarray[0,:] = np.squeeze(basis_blo(xstart_pos))
 
 for n1 in np.arange(1,testlen):
     kooparray = koopmat_blo[0,:,:] + uref_norm[n1-1,0]*koopmat_blo[1,:,:] + uref_norm[n1-1,1]*koopmat_blo[2,:,:] +  + uref_norm[n1-1,2]*koopmat_blo[3,:,:] + uref_norm[n1-1,3]*koopmat_blo[4,:,:]
+    x_sim_eul[n1,:] = simulate_euler(dt, x_sim_eul[n1-1,:], u_ref[n1-1,:])
     zarray[n1,:] = zarray[n1-1,:] + dt*kooparray@zarray[n1-1,:]
 
 x_koop_eul = zarray[:,1:n+1]
@@ -144,6 +167,7 @@ x_koop_eul = (x_koop_eul*xscal[:,0]) + xscal[:,1]
 
 plt.figure()
 plt.plot(tarray, x_ref_eul[:,0], 'c-', label='Reference')
+plt.plot(tarray, x_sim_eul[:,0], 'g:', label='Simulation')
 plt.plot(tarray, x_koop_eul[:,0], 'r--', label='Koopman')
 plt.xlabel('Time (s)')
 plt.ylabel('x (m)')
@@ -152,6 +176,7 @@ plt.show()
 
 plt.figure()
 plt.plot(tarray, x_ref_eul[:,1], 'c-', label='Reference')
+plt.plot(tarray, x_sim_eul[:,1], 'g:', label='Simulation')
 plt.plot(tarray, x_koop_eul[:,1], 'r--', label='Koopman')
 plt.xlabel('Time (s)')
 plt.ylabel('y (m)')
@@ -160,6 +185,7 @@ plt.show()
 
 plt.figure()
 plt.plot(tarray, x_ref_eul[:,2], 'c-', label='Reference')
+plt.plot(tarray, x_sim_eul[:,2], 'g:', label='Simulation')
 plt.plot(tarray, x_koop_eul[:,2], 'r--', label='Koopman')
 plt.xlabel('Time (s)')
 plt.ylabel('z (m)')
@@ -170,6 +196,9 @@ plt.figure()
 plt.plot(tarray, (x_ref_eul[:,3]/np.pi)*180, label='Reference phi')
 plt.plot(tarray, (x_ref_eul[:,4]/np.pi)*180, label='Reference theta')
 plt.plot(tarray, (x_ref_eul[:,5]/np.pi)*180, label='Reference psi')
+plt.plot(tarray, (x_sim_eul[:,3]/np.pi)*180, ':', label='Simulation phi')
+plt.plot(tarray, (x_sim_eul[:,4]/np.pi)*180, ':', label='Simulation theta')
+plt.plot(tarray, (x_sim_eul[:,5]/np.pi)*180, ':', label='Simulation psi')
 plt.plot(tarray, (x_koop_eul[:,3]/np.pi)*180, '--', label='Koopman phi')
 plt.plot(tarray, (x_koop_eul[:,4]/np.pi)*180, '--', label='Koopman theta')
 plt.plot(tarray, (x_koop_eul[:,5]/np.pi)*180, '--', label='Koopman psi')
@@ -215,6 +244,7 @@ plt.show()
 plt.figure()
 ax = plt.axes(projection='3d')
 ax.plot3D(x_ref_eul[:,0], x_ref_eul[:,1], x_ref_eul[:,2], 'c-', label='Reference Trajectory')
+ax.plot3D(x_sim_eul[:,0], x_sim_eul[:,1], x_sim_eul[:,2], 'g:', label='Simulation Trajectory')
 ax.plot3D(x_koop_eul[:,0], x_koop_eul[:,1], x_koop_eul[:,2], 'r--', label='Koopman Trajectory')
 plt.legend()
 ax.set_xlabel('x, m')

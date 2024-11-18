@@ -10,27 +10,27 @@ from scipy.integrate import solve_ivp
 
 
 class Quad_KoopmanMPC:
-    def __init__(self, dt, KoopMat, basis, xscal, uscal):
+    def __init__(self, dt, KoopMat, basis, quadspec, u_ulim, u_llim, xscal, uscal):
         self.n = 10
         self.m = 4
 
         self.nz = 23
 
-        self.mass = 2.02
-        self.Ixx = 0.011
-        self.Iyy = 0.015
-        self.Izz = 0.021
+        self.mass = quadspec[0]
+        self.Ixx = quadspec[1]
+        self.Iyy = quadspec[2]
+        self.Izz = quadspec[3]
         self.gravity = 9.81
-        self.l = 0.26
-        self.ct = 5.84e-6
-        self.cq = 0.06*self.ct
+        self.l = quadspec[4]
+        self.ct = quadspec[5]
+        self.cq = quadspec[6]
 
         self.c1 = (self.Iyy - self.Izz)/self.Ixx
         self.c2 = (self.Izz - self.Ixx)/self.Iyy
         self.c3 = (self.Iyy - self.Ixx)/self.Izz
 
         self.hover_thrust = self.mass*self.gravity
-        self.max_thrust = 28.3
+        self.max_thrust = quadspec[7]
         self.min_thrust = 0.0
 
         self.hover_w2 = (self.hover_thrust)/(4*self.ct)
@@ -40,8 +40,11 @@ class Quad_KoopmanMPC:
         self.max_tz = 2*self.cq*self.max_w2
 
         self.dt = dt                    # time between steps in seconds
-        #self.N = 25                     # number of look ahead steps
-        self.N = 10                     # number of look ahead steps
+        self.N = 25                     # number of look ahead steps
+        #self.N = 10                     # number of look ahead steps
+
+        self.xscal = xscal
+        self.uscal = uscal
 
         self.Amat = KoopMat[0,:,:]
         self.B1mat = KoopMat[1,:,:]
@@ -86,7 +89,7 @@ class Quad_KoopmanMPC:
         #            1.0, 1.0, 1.0, 
         #            0.01, 0.01, 0.01)
 
-        self.Q = ca.diagcat(1.0, 1.0, 1.0, 
+        self.Q = ca.diagcat(10.0, 10.0, 10.0, 
                     1.0, 1.0, 1.0, 
                     1.0, 1.0, 1.0)
         
@@ -97,8 +100,8 @@ class Quad_KoopmanMPC:
 
         # controls weights matrix
         #self.R = ca.diagcat(5e-2, 5e-2, 5e-2, 5e-2)
-        self.R = ca.diagcat(1e-1, 1e-1, 1e-1, 1e-1)
-        #self.R = ca.diagcat(1.0, 1.0, 1.0, 1.0)
+        #self.R = ca.diagcat(1e-1, 1e-1, 1e-1, 1e-1)
+        self.R = ca.diagcat(1.0, 1.0, 1.0, 1.0)
 
         self.RN = self.R
         #self.RN = ca.diagcat(0.0, 0.0, 0.0, 0.0)
@@ -143,12 +146,12 @@ class Quad_KoopmanMPC:
             P = self.P
 
             st_z = self.X[:, k]
-            st = (self.X[1:11, k]*xscal[:,0]) + xscal[:,1]
-            st_targ = (P[self.n_states+1:self.n_states+11]*xscal[:,0]) + xscal[:,1]
+            st = (self.X[1:11, k]*self.xscal[:,0]) + self.xscal[:,1]
+            st_targ = (P[self.n_states+1:self.n_states+11]*self.xscal[:,0]) + self.xscal[:,1]
 
             con_norm = self.U[:, k]
-            con = (self.U[:, k]*uscal[:,0]) + uscal[:,1]
-            con_targ = (P[self.n_states+23:]*uscal[:,0]) + uscal[:,1]
+            con = (self.U[:, k]*self.uscal[:,0]) + self.uscal[:,1]
+            con_targ = (P[self.n_states+23:]*self.uscal[:,0]) + self.uscal[:,1]
 
             if k == self.N - 1:
                 Q = self.QN
@@ -223,15 +226,15 @@ class Quad_KoopmanMPC:
         self.lbx[:self.n_states*(self.N+1)] = -ca.inf
         self.ubx[:self.n_states*(self.N+1)] = ca.inf
 
-        self.lbx[self.n_states*(self.N+1): self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 0.0                # Th lower bound
-        self.lbx[self.n_states*(self.N+1) + 1: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = -2.0           # omega_x lower bound
-        self.lbx[self.n_states*(self.N+1) + 2: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = -2.0           # omega_y lower bound
-        self.lbx[self.n_states*(self.N+1) + 3: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = -2.0           # omega_z lower bound
+        self.lbx[self.n_states*(self.N+1): self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = u_llim[0]               # Th lower bound
+        self.lbx[self.n_states*(self.N+1) + 1: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = u_llim[1]           # omega_x lower bound
+        self.lbx[self.n_states*(self.N+1) + 2: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = u_llim[2]           # omega_y lower bound
+        self.lbx[self.n_states*(self.N+1) + 3: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = u_llim[3]           # omega_z lower bound
 
-        self.ubx[self.n_states*(self.N+1): self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 10.0               # Th upper bound
-        self.ubx[self.n_states*(self.N+1) + 1: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 2.0            # omega_x upper bound
-        self.ubx[self.n_states*(self.N+1) + 2: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 2.0            # omega_y upper bound
-        self.ubx[self.n_states*(self.N+1) + 3: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 2.0            # omega_z upper bound
+        self.ubx[self.n_states*(self.N+1): self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = u_ulim[0]               # Th upper bound
+        self.ubx[self.n_states*(self.N+1) + 1: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = u_ulim[1]           # omega_x upper bound
+        self.ubx[self.n_states*(self.N+1) + 2: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = u_ulim[2]           # omega_y upper bound
+        self.ubx[self.n_states*(self.N+1) + 3: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = u_ulim[3]           # omega_z upper bound
 
 
         self.args = {
@@ -244,6 +247,8 @@ class Quad_KoopmanMPC:
     def simulate(self, step_horizon, t0, state_init, u):
 
         u_ctrl = np.squeeze(u[:,1])
+
+        u_ctrl = (u_ctrl*self.uscal[:,0]) + self.uscal[:,1]
 
         def lin_func(t, x):
             xdot = [x[7], x[8], x[9],
@@ -403,7 +408,7 @@ class Quad_KoopmanMPC_Euler:
         #            1.0, 1.0, 1.0, 
         #            0.01, 0.01, 0.01)
 
-        self.Q = ca.diagcat(40.0, 40.0, 40.0, 
+        self.Q = ca.diagcat(10.0, 10.0, 10.0, 
                     1.0, 1.0, 1.0, 
                     1.0, 1.0, 1.0)
         
@@ -418,7 +423,7 @@ class Quad_KoopmanMPC_Euler:
         #self.R = ca.diagcat(5e-5, 5e-5, 5e-5, 5e-5)
         #self.R = ca.diagcat(20.0, 20.0, 20.0, 20.0)
 
-        self.R = ca.diagcat(1e-6, 1e-6, 1e-6, 1e-6)
+        self.R = ca.diagcat(1.0, 1.0, 1.0, 1.0)
 
         self.RN = self.R
         #self.RN = ca.diagcat(0.0, 0.0, 0.0, 0.0)
@@ -640,6 +645,67 @@ class Quad_KoopmanMPC_Euler:
         ))
 
         return np.squeeze(u[:,1])
+    
+    def ctrl_loop_debug(self, state_init_x, state_target_x, ctrl_init):
+
+        # Control Setup
+
+        t0 = 0
+        state_init = ca.DM(self.basis(state_init_x))          # initial state
+        state_target = ca.DM(self.basis(state_target_x))      # target state
+
+        # xx = DM(state_init)
+        t = ca.DM(t0)
+
+        u0 = ca.repmat(ctrl_init, 1, self.N)            # initial control
+        X0 = ca.repmat(state_init, 1, self.N+1)         # initial state full
+
+
+        mpc_iter = 0
+        cat_states = self.DM2Arr(X0)
+        cat_controls = self.DM2Arr(u0[:, 0])
+        times = np.array([[0]])
+
+        # Control Loop
+
+        self.args['p'] = ca.vertcat(
+            state_init,     # current state
+            state_target,   # target state
+            ctrl_init       # reference control
+        )
+        # optimization variable current state
+        self.args['x0'] = ca.vertcat(
+            ca.reshape(X0, self.n_states*(self.N+1), 1),
+            ca.reshape(u0, self.n_controls*self.N, 1)
+        )
+
+        sol = self.solver(
+            x0=self.args['x0'],
+            lbx=self.args['lbx'],
+            ubx=self.args['ubx'],
+            lbg=self.args['lbg'],
+            ubg=self.args['ubg'],
+            p=self.args['p']
+        )
+
+        u = ca.reshape(sol['x'][self.n_states * (self.N + 1):], self.n_controls, self.N)
+        X0 = ca.reshape(sol['x'][: self.n_states * (self.N+1)], self.n_states, self.N+1)
+
+        cat_states = np.dstack((
+            cat_states,
+            self.DM2Arr(X0)
+        ))
+
+        cat_controls = np.vstack((
+            cat_controls,
+            self.DM2Arr(u[:, 0])
+        ))
+        t = np.vstack((
+            t,
+            t0
+        ))
+
+        return self.DM2Arr(u), self.DM2Arr(X0)
 
 
 

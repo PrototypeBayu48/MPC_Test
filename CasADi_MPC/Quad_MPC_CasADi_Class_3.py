@@ -11,25 +11,25 @@ from scipy.integrate import solve_ivp
 
 
 class Quad_MPC:
-    def __init__(self, dt):
+    def __init__(self, dt, quadspec):
         self.n = 10
         self.m = 4
 
-        self.mass = 2.02
-        self.Ixx = 0.011
-        self.Iyy = 0.015
-        self.Izz = 0.021
+        self.mass = quadspec[0]
+        self.Ixx = quadspec[1]
+        self.Iyy = quadspec[2]
+        self.Izz = quadspec[3]
         self.gravity = 9.81
-        self.l = 0.26
-        self.ct = 5.84e-6
-        self.cq = 0.06*self.ct
+        self.l = quadspec[4]
+        self.ct = quadspec[5]
+        self.cq = quadspec[6]
 
         self.c1 = (self.Iyy - self.Izz)/self.Ixx
         self.c2 = (self.Izz - self.Ixx)/self.Iyy
         self.c3 = (self.Iyy - self.Ixx)/self.Izz
 
         self.hover_thrust = self.mass*self.gravity
-        self.max_thrust = 28.3
+        self.max_thrust = quadspec[7]
         self.min_thrust = 0.0
 
         self.hover_w2 = (self.hover_thrust)/(4*self.ct)

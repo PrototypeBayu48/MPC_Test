@@ -18,7 +18,8 @@ import pickle
 
 def simulate_euler(step_horizon, t0, state_init, u):
 
-    u_ctrl = np.squeeze(u[:,1])
+    #u_ctrl = np.squeeze(u[:,1])
+    u_ctrl = u
 
     def lin_func(t, x):
         xdot = [x[6], x[7], x[8], u_ctrl[1] ,u_ctrl[2], u_ctrl[3],
@@ -52,6 +53,57 @@ def simulate_koop(state_init, u, koopmat, basis, xscal, uscal):
 
     return next_state_euler, u_ctrl
 
+def debug_func(zstep, ustep, xdata):
+
+    datalen = len(xdata[:,0])
+    predlen = len(zstep[0,:])
+
+    xstep_norm = zstep[1:10,:]
+    xstep = ((xstep_norm.T)*xscal[:,0]) + xscal[:,1]
+    ustep = ((ustep.T)*uscal[:,0]) + uscal[:,1]
+
+    xsim = np.zeros((predlen,n))
+    xsim[0,:] = xstep[0,:]
+
+    for n1 in np.arange(1,predlen):
+        [xsim[n1,:],u] = simulate_euler(dt, 0.0, xsim[n1-1,:], ustep[n1-1,:])
+    
+    tdata = dt*np.arange(datalen)
+    tspan = tdata[-1] + dt*np.arange(predlen)
+    
+    fig1, ax1 = plt.subplots(3,sharex=True)
+    for n1 in np.arange(3):
+        if n1 == 0:
+            ax1[n1].plot(tspan,xstep[:,n1],'b:',label='Koopman MPC Trajectory')
+            ax1[n1].plot(tspan,xsim[:,n1],'c:',label='Simulation Trajectory')
+            ax1[n1].plot(tdata,xdata[:,n1],'g-',label='Real Trajectory')
+        else:
+            ax1[n1].plot(tspan,xstep[:,n1],'b:')
+            ax1[n1].plot(tspan,xsim[:,n1],'c:')
+            ax1[n1].plot(tdata,xdata[:,n1],'g-')
+    ax1[0].set(ylabel='x (m)')
+    ax1[1].set(ylabel='y (m)')
+    ax1[2].set(ylabel='z (m)')
+    fig1.legend()
+    fig1.supxlabel('Time, s')
+    plt.show()
+
+    fig1, ax1 = plt.subplots(3,sharex=True)
+    for n1 in np.arange(3,6):
+        if n1 == 3:
+            ax1[n1-3].plot(tspan,(xstep[:,n1]/np.pi)*180,'b:',label='Koopman MPC Trajectory')
+            ax1[n1-3].plot(tspan,(xsim[:,n1]/np.pi)*180,'c:',label='Simulation Trajectory')
+            ax1[n1-3].plot(tdata,(xdata[:,n1]/np.pi)*180,'g-',label='Real Trajectory')
+        else:
+            ax1[n1-3].plot(tspan,(xstep[:,n1]/np.pi)*180,'b:')
+            ax1[n1-3].plot(tspan,(xsim[:,n1]/np.pi)*180,'c:')
+            ax1[n1-3].plot(tdata,(xdata[:,n1]/np.pi)*180,'g-')
+    ax1[0].set(ylabel='phi (deg)')
+    ax1[1].set(ylabel='theta (deg)')
+    ax1[2].set(ylabel='psi (deg)')
+    fig1.legend()
+    fig1.supxlabel('Time, s')
+    plt.show()
 
 def defkbf(n,m):
     return CKBF_STK([n, m, 13+1], 100*np.ones(2), True, jax.nn.swish)
@@ -89,17 +141,36 @@ dt = 0.02
 
 model = 'BLO'
 
+model_norm = 1
+
+debug = 1
+
 if model == 'BLO':
-    koopmat_blo = np.load('matrices_rotrate_crazyflie_blo_1.npy')
-    with open('net_rotrate_crazyflie_blo_1.pkl','rb') as fp:
-        params_blo = pickle.load(fp)
+    if model_norm == 1:
+        koopmat_blo = np.load('matrices_rotrate_crazyflie_blo_4.npy')
+        with open('net_rotrate_crazyflie_blo_4.pkl','rb') as fp:
+            params_blo = pickle.load(fp)
 
-    xscal = np.load('xscal_rotrate_crazyflie_blo_1.npy')
-    uscal = np.load('uscal_rotrate_crazyflie_blo_1.npy')
+        xscal = np.load('xscal_rotrate_crazyflie_blo_4.npy')
+        uscal = np.load('uscal_rotrate_crazyflie_blo_4.npy')
 
-    kbf = defkbf(n,m)
-    def basis_blo(x):
-        return np.array(kbf.encoder(x,params_blo))
+        kbf = defkbf(n,m)
+        def basis_blo(x):
+            return np.array(kbf.encoder(x,params_blo))
+    else:
+        koopmat_blo = np.load('matrices_rotrate_crazyflie_blo_3.npy')
+        with open('net_rotrate_crazyflie_blo_3.pkl','rb') as fp:
+            params_blo = pickle.load(fp)
+
+        xscal = np.zeros((n,2))
+        xscal[:,0] = 1
+
+        uscal = np.zeros((n,2))
+        uscal[:,0] = 1
+
+        kbf = defkbf(n,m)
+        def basis_blo(x):
+            return np.array(kbf.encoder(x,params_blo))
     
 '''
 xtrain = np.load('x_quat_train_3.npy')
@@ -116,18 +187,26 @@ for n1 in range(n):
 
 ti = 0.0
 tf = 4.0
+#tf = 8.0
 
-tracking = 0
+tracking = 1
 mindist = 0
 
 trajlen = int((tf-ti)/dt)
 
-xinit = np.array([0.0, 0.0, 0.8,
-                  0.0, 0.0, 0.0,
+#yawinit = 0.0
+yawinit = (3*np.pi)/4
+
+#yawtarg = 0.0
+#yawtarg = np.pi/2
+yawtarg = (-3*np.pi)/4
+
+xinit = np.array([0.0, 0.0, 0.2,
+                  0.0, 0.0, yawinit,
                   0.0, 0.0, 0.0,])
 
-xtarg = np.array([0.0, 0.0, 1.0,
-                  0.0, 0.0, 0.0,
+xtarg = np.array([0.5, 0.5, 1.0,
+                  0.0, 0.0, yawtarg,
                   0.0, 0.0, 0.0,])
 
 dxdt = (xtarg[0] - xinit[0])/(tf-ti)
@@ -148,6 +227,8 @@ for n1 in range(trajlen):
         xarray_targ[n1+1,0] = xarray_targ[0,0] + dxdt*(n1+1)*dt
         xarray_targ[n1+1,1] = xarray_targ[0,1] + dydt*(n1+1)*dt
         xarray_targ[n1+1,2] = xarray_targ[0,2] + dzdt*(n1+1)*dt
+
+t_targ = dt*np.arange(trajlen+1)
 
 u0 = np.array([10*(hover_thrust/max_thrust), 0.0, 0.0, 0.0])
 
@@ -172,22 +253,29 @@ for n1 in np.arange(1,trajlen+1):
 
     ustart = (u0 - uscal[:,1])/uscal[:,0]
 
-    tstart = time()
-    #[u0, att] = MPC_blo.ctrl_loop(xarray[n1-1,:], xarray_targ[n1,:], u0)
-    u0 = MPC_blo.ctrl_loop(xstart_pos, xtarg_pos, ustart)
-    tcomp[n1-1] = time() - tstart
+    if debug == 1:
+        [upred,zpred] = MPC_blo.ctrl_loop_debug(xstart_pos, xtarg_pos, ustart)
+        if n1//10 == n1/10:
+            debug_func(zpred, upred, xarray[:n1,:])
+        u0 = np.squeeze(upred[:,1])
+    else:
+        tstart = time()
+        #[u0, att] = MPC_blo.ctrl_loop(xarray[n1-1,:], xarray_targ[n1,:], u0)
+        u0 = MPC_blo.ctrl_loop(xstart_pos, xtarg_pos, ustart)
+        tcomp[n1-1] = time() - tstart
 
     u0 = (u0*uscal[:,0]) + uscal[:,1]
 
-    control = np.zeros((m,2))
-    control[:,1] = u0
+    #control = np.zeros((m,2))
+    #control[:,1] = u0
+    control =  u0
 
     #xarray[n1,:] = MPC.simulate(dt, 0.0, xarray[n1-1,:], control)
     #xarray[n1,:] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
     #uarray[n1-1,:] = u0
 
-    #[xarray[n1,:], uarray[n1-1,:]] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
-    [xarray[n1,:], uarray[n1-1,:]] = simulate_koop(xarray[n1-1,:], control, koopmat_blo, basis_blo, xscal, uscal)
+    [xarray[n1,:], uarray[n1-1,:]] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
+    #[xarray[n1,:], uarray[n1-1,:]] = simulate_koop(xarray[n1-1,:], control, koopmat_blo, basis_blo, xscal, uscal)
 
     #u0 = uarray[n1-1,:]
 
@@ -215,22 +303,21 @@ tarray = dt*np.arange(0,iter+1)
 xarray_euler = xarray[:iter+1,:]
 uarray = uarray[:iter,:]
 
-plt.figure()
-plt.plot(tarray, xarray_euler[:,0])
-plt.xlabel('Time (s)')
-plt.ylabel('x (m)')
-plt.show()
-
-plt.figure()
-plt.plot(tarray, xarray_euler[:,1])
-plt.xlabel('Time (s)')
-plt.ylabel('y (m)')
-plt.show()
-
-plt.figure()
-plt.plot(tarray, xarray_euler[:,2])
-plt.xlabel('Time (s)')
-plt.ylabel('z (m)')
+fig1, ax1 = plt.subplots(3,sharex=True)
+for n1 in np.arange(3):
+    if n1 == 0:
+        ax1[n1].plot(tarray,xarray_euler[:,n1],'b-',label='Koopman MPC Trajectory')
+        ax1[n1].plot(t_targ,xarray_targ[:,n1],'c:',label='Target Trajectory')
+        ax1[n1].plot([tarray[0],tarray[-1]],[xtarg[n1],xtarg[n1]],'k:',label='Target Position')
+    else:
+        ax1[n1].plot(tarray,xarray_euler[:,n1],'b-')
+        ax1[n1].plot(t_targ,xarray_targ[:,n1],'c:')
+        ax1[n1].plot([tarray[0],tarray[-1]],[xtarg[n1],xtarg[n1]],'k:')
+ax1[0].set(ylabel='x (m)')
+ax1[1].set(ylabel='y (m)')
+ax1[2].set(ylabel='z (m)')
+fig1.legend()
+fig1.supxlabel('Time (s)')
 plt.show()
 
 plt.figure()

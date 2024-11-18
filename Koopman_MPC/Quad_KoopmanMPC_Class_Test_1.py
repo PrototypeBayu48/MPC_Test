@@ -93,12 +93,12 @@ if model == 'BLO':
     def basis_blo(x):
         return np.array(kbf.encoder(x,params_blo))
 elif model == 'Rottest':
-    koopmat_blo = np.load('matrices_rotrate_quat_crazyflie_blo_1.npy')
-    with open('net_rotrate_quat_crazyflie_blo_1.pkl','rb') as fp:
+    koopmat_blo = np.load('matrices_rotrate_quat_crazyflie_blo_2.npy')
+    with open('net_rotrate_quat_crazyflie_blo_2.pkl','rb') as fp:
         params_blo = pickle.load(fp)
 
-    xscal = np.load('xscal_rotrate_quat_crazyflie_blo_1.npy')
-    uscal = np.load('uscal_rotrate_quat_crazyflie_blo_1.npy')
+    xscal = np.load('xscal_rotrate_quat_crazyflie_blo_2.npy')
+    uscal = np.load('uscal_rotrate_quat_crazyflie_blo_2.npy')
 
     kbf = defkbf(n,m,2)
     def basis_blo(x):
@@ -125,18 +125,22 @@ mindist = 0
 
 trajlen = int((tf-ti)/dt)
 
-rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_quat()
+#rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_quat()
 #rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, 3*pi/2]).as_quat()
+rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, 3*pi/4]).as_quat()
+#rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, ((170/180)*pi)]).as_quat()
 
-xinit = np.array([0.0, 0.0, 0.5,
+xinit = np.array([0.0, 0.0, 0.2,
                   rinit_quat[0], rinit_quat[1], rinit_quat[2], rinit_quat[3],
                   0.0, 0.0, 0.0,])
 
-rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_quat()
+#rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_quat()
 #rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, pi/2]).as_quat()
 #rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, -3*pi/2]).as_quat()
+rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, -3*pi/4]).as_quat()
+#rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, ((-170/180)*pi)]).as_quat()
 
-xtarg = np.array([0.0, 0.0, 0.5,
+xtarg = np.array([0.5, 0.5, 1.0,
                   rtarg_quat[0], rtarg_quat[1], rtarg_quat[2], rtarg_quat[3],
                   0.0, 0.0, 0.0,])
 
@@ -159,9 +163,14 @@ for n1 in range(trajlen):
         xarray_targ[n1+1,1] = xarray_targ[0,1] + dydt*(n1+1)*dt
         xarray_targ[n1+1,2] = xarray_targ[0,2] + dzdt*(n1+1)*dt
 
+t_targ = dt*np.arange(trajlen+1)
+
 u0 = np.array([10*(hover_thrust/max_thrust), 0.0, 0.0, 0.0])
 
-MPC_blo = Quad_KoopmanMPC(dt, koopmat_blo, basis_blo, xscal, uscal)
+umax = np.array([10.0, 2.0, 2.0, 2.0])
+umin = np.array([0.0, -2.0, -2.0, -2.0])
+
+MPC_blo = Quad_KoopmanMPC(dt, koopmat_blo, basis_blo, quadspec, (umax - uscal[:,1])/uscal[:,0], (umin - uscal[:,1])/uscal[:,0],xscal,uscal)
 
 xarray = np.zeros((trajlen+1,n))
 uarray = np.zeros((trajlen,m))
@@ -229,22 +238,21 @@ uarray = uarray[:iter,:]
 for n1 in range(iter+1):
     xarray_euler[n1,3:6] = Rot.from_quat(xarray[n1,3:7]).as_euler('xyz')
 
-plt.figure()
-plt.plot(tarray, xarray_euler[:,0])
-plt.xlabel('Time (s)')
-plt.ylabel('x (m)')
-plt.show()
-
-plt.figure()
-plt.plot(tarray, xarray_euler[:,1])
-plt.xlabel('Time (s)')
-plt.ylabel('y (m)')
-plt.show()
-
-plt.figure()
-plt.plot(tarray, xarray_euler[:,2])
-plt.xlabel('Time (s)')
-plt.ylabel('z (m)')
+fig1, ax1 = plt.subplots(3,sharex=True)
+for n1 in np.arange(3):
+    if n1 == 0:
+        ax1[n1].plot(tarray,xarray_euler[:,n1],'b-',label='Koopman MPC Trajectory')
+        ax1[n1].plot(t_targ,xarray_targ[:,n1],'c:',label='Target Trajectory')
+        ax1[n1].plot([tarray[0],tarray[-1]],[xtarg[n1],xtarg[n1]],'k:',label='Target Position')
+    else:
+        ax1[n1].plot(tarray,xarray_euler[:,n1],'b-')
+        ax1[n1].plot(t_targ,xarray_targ[:,n1],'c:')
+        ax1[n1].plot([tarray[0],tarray[-1]],[xtarg[n1],xtarg[n1]],'k:')
+ax1[0].set(ylabel='x (m)')
+ax1[1].set(ylabel='y (m)')
+ax1[2].set(ylabel='z (m)')
+fig1.legend()
+fig1.supxlabel('Time (s)')
 plt.show()
 
 plt.figure()
