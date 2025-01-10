@@ -10,6 +10,30 @@ from scipy.integrate import solve_ivp
 
 from NMPC_CasADi_Class_1 import Quad_MPC
 
+def simulate_quat(step_horizon, t0, state_init, u):
+
+    state_init = np.squeeze(state_init)
+
+    u_ctrl = np.squeeze(u[:,1])
+    s = 1/(np.linalg.norm(state_init[3:7]))
+
+    def lin_func(t, x):
+        xdot = [x[7], x[8], x[9],
+                0.5*(1/(np.linalg.norm(x[3:7])))*(u_ctrl[1]*x[6] - u_ctrl[2]*x[5] + u_ctrl[3]*x[4]),
+                0.5*(1/(np.linalg.norm(x[3:7])))*(u_ctrl[1]*x[5] + u_ctrl[2]*x[6] - u_ctrl[3]*x[3]),
+                0.5*(1/(np.linalg.norm(x[3:7])))*(-u_ctrl[1]*x[4] + u_ctrl[2]*x[3] + u_ctrl[3]*x[6]),
+                0.5*(1/(np.linalg.norm(x[3:7])))*(-u_ctrl[1]*x[3] - u_ctrl[2]*x[4] - u_ctrl[3]*x[5]),
+                2*(x[3]*x[5] + x[6]*x[4])*((u_ctrl[0]*0.1*max_thrust)/mass),
+                2*(x[4]*x[5] - x[6]*x[3])*((u_ctrl[0]*0.1*max_thrust)/mass),
+                (x[6]**2 - x[3]**2 - x[4]**2 + x[5]**2)*((u_ctrl[0]*0.1*max_thrust)/mass) - gravity]
+        return xdot
+
+    soln = solve_ivp(lin_func, [0.0, step_horizon], np.squeeze(state_init), t_eval = [step_horizon])
+    xnext = soln.y
+    next_state =  np.squeeze(xnext)
+
+    return next_state, u_ctrl
+
 def simulate_euler(step_horizon, t0, state_init_quat, u):
 
     state_init = np.zeros(9)
@@ -36,24 +60,29 @@ def simulate_euler(step_horizon, t0, state_init_quat, u):
 
     return next_state_quat, u_ctrl
 
+quadspec_crazyflie = [0.0336, 1.7e-5, 1.7e-5, 2.9e-5, 0.04, 3.1582e-10, 7.9379e-12, 0.057*9.81]
+quadspec_iris = [2.02, 0.011, 0.015, 0.021, 0.26, 5.84e-6, 0.06*5.84e-6, 28.3]
+
+quadspec = quadspec_iris
+
 n = 10
 m = 4
 
-mass = 0.0336
-Ixx = 1.7e-5
-Iyy = 1.7e-5
-Izz = 2.9e-5
+mass = quadspec[0]
+Ixx = quadspec[1]
+Iyy = quadspec[2]
+Izz = quadspec[3]
 gravity = 9.81
-l = 0.04
-ct = 3.1582e-10
-cq = 7.9379e-12
+l = quadspec[4]
+ct = quadspec[5]
+cq = quadspec[6]
 
 c1 = (Iyy - Izz)/Ixx
 c2 = (Izz - Ixx)/Iyy
 c3 = (Iyy - Ixx)/Izz
 
 hover_thrust = mass*gravity
-max_thrust = 0.057
+max_thrust = quadspec[7]
 min_thrust = 0.0
 
 hover_w2 = (hover_thrust)/(4*ct)
@@ -62,11 +91,11 @@ max_tx = ct*l*max_w2
 max_ty = ct*l*max_w2
 max_tz = 2*cq*max_w2
 
-dt = 0.02
-#dt = 0.05
+#dt = 0.02
+dt = 0.05
 
 ti = 0.0
-tf = 2.0
+tf = 5.0
 
 tracking = 1
 mindist = 0
@@ -83,8 +112,8 @@ uarray_train = np.zeros((nflight, ((nwp-1)*trajlen), m))
 
 for m1 in range(nflight):
     waypoint = np.random.rand(nwp,3)
-    waypoint[:,:2] = -0.4*np.ones((nwp,2)) + 0.8*waypoint[:,:2]
-    waypoint[:,2] = 0.1*np.ones(nwp) + 0.9*waypoint[:,2]
+    waypoint[:,:2] = -5.0*np.ones((nwp,2)) + 5.0*waypoint[:,:2]
+    waypoint[:,2] = 0.5*np.ones(nwp) + 9.5*waypoint[:,2]
 
     initpt = waypoint[0,:]
     inityaw = np.array([0.0, 0.0, 0.0])
@@ -148,7 +177,7 @@ for m1 in range(nflight):
 
         u0 = uinit
 
-        MPC = Quad_MPC(dt)
+        MPC = Quad_MPC(dt, quadspec)
 
         xarray = np.zeros((trajlen+1,n))
         uarray = np.zeros((trajlen,m))
@@ -172,7 +201,8 @@ for m1 in range(nflight):
             #xarray[n1,:] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
             #uarray[n1-1,:] = u0
 
-            [xarray[n1,:], uarray[n1-1,:]] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
+            [xarray[n1,:], uarray[n1-1,:]] = simulate_quat(dt, 0.0, xarray[n1-1,:], control)
+            #[xarray[n1,:], uarray[n1-1,:]] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
 
             #u0 = uarray[n1-1,:]
 
@@ -286,9 +316,9 @@ ax.set_ylabel('y, m')
 ax.set_zlabel('z, m')
 plt.show()
 
-np.save('x_quat_train_4', xarray_train)
-np.save('x_eul_train_4', xarray_euler_train)
-np.save('u_train_quad_4', uarray_train)
+np.save('x_quat_train_5', xarray_train)
+np.save('x_eul_train_5', xarray_euler_train)
+np.save('u_train_quad_5', uarray_train)
 
 
 

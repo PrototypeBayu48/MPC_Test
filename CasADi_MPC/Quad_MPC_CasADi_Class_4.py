@@ -89,9 +89,9 @@ class Quad_MPC:
         self.P = ca.SX.sym('P', self.n_states + self.n_states + self.n_controls)
 
         # state weights matrix
-        self.Q = ca.diagcat(10.0, 10.0, 10.0, 
+        self.Q = ca.diagcat(20.0, 20.0, 20.0, 
                     10.0, 10.0, 10.0, 
-                    0.2, 0.2, 0.2)
+                    1.0, 1.0, 1.0)
         
         #self.QN = self.Q
         self.QN = ca.diagcat(20.0, 20.0, 20.0, 
