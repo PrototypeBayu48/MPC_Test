@@ -76,5 +76,43 @@ def simulate_quat(step_horizon, t0, state_init, u_ctrl, quadspec):
 
     return next_state, u_ctrl
 
+def simulate_quat_full(step_horizon, t0, state_init, u_ctrl, quadspec):
+
+    mass = quadspec[0]
+    Ixx = quadspec[1]
+    Iyy = quadspec[2]
+    Izz = quadspec[3]
+    gravity = 9.81
+    l = quadspec[4]
+    ct = quadspec[5]
+    cq = quadspec[6]
+    max_thrust = quadspec[7]
+
+    c1 = (Iyy - Izz)/Ixx
+    c2 = (Izz - Ixx)/Iyy
+    c3 = (Iyy - Ixx)/Izz
+
+    s = 1/(np.linalg.norm(state_init[3:7]))
+
+    def lin_func(t, x):
+        xdot = [x[7], x[8], x[9],
+                0.5*(1/(np.linalg.norm(x[3:7])))*(x[10]*x[6] - x[11]*x[5] + x[12]*x[4]),
+                0.5*(1/(np.linalg.norm(x[3:7])))*(x[10]*x[5] + x[11]*x[6] - x[12]*x[3]),
+                0.5*(1/(np.linalg.norm(x[3:7])))*(-x[10]*x[4] + x[11]*x[3] + x[12]*x[6]),
+                0.5*(1/(np.linalg.norm(x[3:7])))*(-x[10]*x[3] - x[11]*x[4] - x[12]*x[5]),
+                2*(x[3]*x[5] + x[6]*x[4])*(((ct)*(u_ctrl[0] + u_ctrl[1] + u_ctrl[2] + u_ctrl[3]))/mass),
+                2*(x[4]*x[5] - x[6]*x[3])*(((ct)*(u_ctrl[0] + u_ctrl[1] + u_ctrl[2] + u_ctrl[3]))/mass),
+                (x[6]**2 - x[3]**2 - x[4]**2 + x[5]**2)*(((ct)*(u_ctrl[0] + u_ctrl[1] + u_ctrl[2] + u_ctrl[3]))/mass) - gravity,
+                x[11]*x[12]*c1 + ((ct*l)*((u_ctrl[1]) - (u_ctrl[3])))/Ixx,
+                x[10]*x[12]*c2 + ((ct*l)*(- (u_ctrl[0]) + (u_ctrl[2])))/Iyy,
+                x[10]*x[11]*c3 + ((cq)*(- (u_ctrl[0]) + (u_ctrl[1]) - (u_ctrl[2]) + (u_ctrl[3])))/Izz]
+        return xdot
+
+    soln = solve_ivp(lin_func, [0.0, step_horizon], np.squeeze(state_init), t_eval = [step_horizon])
+    xnext = soln.y
+    next_state =  np.squeeze(xnext)
+
+    return next_state, u_ctrl
+
 
 

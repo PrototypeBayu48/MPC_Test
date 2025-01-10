@@ -10,50 +10,33 @@ from scipy.integrate import solve_ivp
 
 from NMPC_CasADi_Class_1 import Quad_MPC
 
-def simulate_euler(step_horizon, t0, state_init_quat, u):
+from func_simulation import simulate_euler
 
-    state_init = np.zeros(9)
-    state_init[:3] = state_init_quat[:3]
-    state_init[3:6] = Rot.from_quat(state_init_quat[3:7]).as_euler('xyz')
-    state_init[6:] = state_init_quat[7:]
-
-    u_ctrl = np.squeeze(u[:,1])
-
-    def lin_func(t, x):
-        xdot = [x[6], x[7], x[8], u_ctrl[1] ,u_ctrl[2], u_ctrl[3],
-                ((cos(x[5])*sin(x[4])*cos(x[3]) + sin(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
-                ((sin(x[5])*sin(x[4])*cos(x[3]) - cos(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
-                -gravity + ((cos(x[4])*cos(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust)]
-        return xdot
-    soln = solve_ivp(lin_func, [0.0, step_horizon], np.squeeze(state_init), t_eval = [step_horizon])
-    xnext = soln.y
-    next_state_euler =  np.squeeze(xnext)
-
-    next_state_quat = np.zeros(10)
-    next_state_quat[:3] = next_state_euler[:3]
-    next_state_quat[3:7] = Rot.from_euler('xyz', next_state_euler[3:6]).as_quat()
-    next_state_quat[7:] = next_state_euler[6:]
-
-    return next_state_quat, u_ctrl
+from func_attconv import eultoquat, quattoeul
 
 n = 10
 m = 4
 
-mass = 2.02
-Ixx = 0.011
-Iyy = 0.015
-Izz = 0.021
+quadspec_iris = [2.02, 0.011, 0.015, 0.021, 0.26, 5.84e-6, 0.06*5.84e-6, 28.3]
+quadspec_crazyflie = [0.0336, 1.7e-5, 1.7e-5, 2.9e-5, 0.04, 3.1582e-10, 7.9379e-12, 0.057*9.81]
+
+quadspec = quadspec_iris
+
+mass = quadspec[0]
+Ixx = quadspec[1]
+Iyy = quadspec[2]
+Izz = quadspec[3]
 gravity = 9.81
-l = 0.26
-ct = 5.84e-6
-cq = 0.06*ct
+l = quadspec[4]
+ct = quadspec[5]
+cq = quadspec[6]
 
 c1 = (Iyy - Izz)/Ixx
 c2 = (Izz - Ixx)/Iyy
 c3 = (Iyy - Ixx)/Izz
 
 hover_thrust = mass*gravity
-max_thrust = 28.3
+max_thrust = quadspec[7]
 min_thrust = 0.0
 
 hover_w2 = (hover_thrust)/(4*ct)
@@ -137,7 +120,7 @@ for m1 in range(nwp-1):
 
     u0 = uinit
 
-    MPC = Quad_MPC(dt)
+    MPC = Quad_MPC(dt, quadspec)
 
     xarray = np.zeros((trajlen+1,n))
     uarray = np.zeros((trajlen,m))
@@ -154,14 +137,13 @@ for m1 in range(nwp-1):
         [u0, att] = MPC.ctrl_loop(xarray[n1-1,:], xarray_targ[n1,:], u0)
         tcomp[n1-1] = time() - tstart
 
-        control = np.zeros((m,2))
-        control[:,1] = u0
-
         #xarray[n1,:] = MPC.simulate(dt, 0.0, xarray[n1-1,:], control)
         #xarray[n1,:] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
         #uarray[n1-1,:] = u0
 
-        [xarray[n1,:], uarray[n1-1,:]] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
+        [xnext_eul, uarray[n1-1,:]] = simulate_euler(dt, 0.0, quattoeul(xarray[n1-1,:]), u0, quadspec)
+
+        xarray[n1,:] = eultoquat(xnext_eul)
 
         #u0 = uarray[n1-1,:]
 

@@ -16,8 +16,11 @@ import jax
 
 import pickle
 
-def eultoquat(x_eul):
-    x_quat = np.zeros(10)
+def eultoquat(x_eul, full=0):
+    if full == 1:
+        x_quat = np.zeros(13)
+    else:
+        x_quat = np.zeros(10)
 
     x_quat[:3] = x_eul[:3]
     x_quat[7:] = x_eul[6:]
@@ -26,8 +29,11 @@ def eultoquat(x_eul):
 
     return x_quat
 
-def quattoeul(x_quat):
-    x_eul = np.zeros(9)
+def quattoeul(x_quat, full=0):
+    if full == 1:
+        x_eul = np.zeros(12)
+    else:
+        x_eul = np.zeros(9)
 
     x_eul[:3] = x_quat[:3]
     x_eul[6:] = x_quat[7:]
@@ -36,8 +42,11 @@ def quattoeul(x_quat):
 
     return x_eul
 
-def eultorotvec(x_eul):
-    x_rotvec = np.zeros(9)
+def eultorotvec(x_eul, full=0):
+    if full == 1:
+        x_rotvec = np.zeros(12)
+    else:
+        x_rotvec = np.zeros(9)
 
     x_rotvec[:3] = x_eul[:3]
     x_rotvec[6:] = x_eul[6:]
@@ -46,8 +55,11 @@ def eultorotvec(x_eul):
 
     return x_rotvec
 
-def rotvectoeul(x_rotvec):
-    x_eul = np.zeros(9)
+def rotvectoeul(x_rotvec, full=0):
+    if full == 1:
+        x_eul = np.zeros(12)
+    else:
+        x_eul = np.zeros(9)
 
     x_eul[:3] = x_rotvec[:3]
     x_eul[6:] = x_rotvec[6:]
@@ -56,8 +68,11 @@ def rotvectoeul(x_rotvec):
 
     return x_eul
 
-def quattorotvec(x_quat):
-    x_rotvec = np.zeros(9)
+def quattorotvec(x_quat, full=0):
+    if full == 1:
+        x_rotvec = np.zeros(12)
+    else:
+        x_rotvec = np.zeros(9)
 
     x_rotvec[:3] = x_quat[:3]
     x_rotvec[6:] = x_quat[7:]
@@ -66,8 +81,11 @@ def quattorotvec(x_quat):
 
     return x_rotvec
 
-def rotvectoquat(x_rotvec):
-    x_quat = np.zeros(10)
+def rotvectoquat(x_rotvec, full=0):
+    if full == 1:
+        x_quat = np.zeros(13)
+    else:
+        x_quat = np.zeros(10)
 
     x_quat[:3] = x_rotvec[:3]
     x_quat[7:] = x_rotvec[6:]
