@@ -20,6 +20,8 @@ from func_simulation import simulate_koop, simulate_euler
 
 from func_attconv import eultorotvec, rotvectoeul
 
+import os
+
 def debug_func(zstep, ustep, xdata):
 
     datalen = len(xdata[:,0])
@@ -150,23 +152,23 @@ model = 'BLO'
 debug = 100
 
 if model == 'BLO':
-    koopmat_blo = np.load('matrices_dataset_6_rotvec_blo_1.npy')
-    with open('net_dataset_6_rotvec_blo_1.pkl','rb') as fp:
+    koopmat_blo = np.load(os.getcwd() + '/trainmodel/matrices_dataset_6_rotvec_blo_1.npy')
+    with open(os.getcwd() + '/trainmodel/net_dataset_6_rotvec_blo_1.pkl','rb') as fp:
         params_blo = pickle.load(fp)
 
-    xscal = np.load('xscal_dataset_6_rotvec_blo_1.npy')
-    uscal = np.load('uscal_dataset_6_rotvec_blo_1.npy')
+    xscal = np.load(os.getcwd() + '/trainmodel/xscal_dataset_6_rotvec_blo_1.npy')
+    uscal = np.load(os.getcwd() + '/trainmodel/uscal_dataset_6_rotvec_blo_1.npy')
 
     kbf = defkbf(n,m,2)
     def basis_blo(x):
         return np.array(kbf.encoder(x,params_blo))
 elif model == 'Rottest':
-    koopmat_blo = np.load('matrices_rotrate_rotvec_crazyflie_blo_1.npy')
-    with open('net_rotrate_rotvec_crazyflie_blo_1.pkl','rb') as fp:
+    koopmat_blo = np.load(os.getcwd() + '/trainmodel/matrices_rotrate_rotvec_crazyflie_blo_1.npy')
+    with open(os.getcwd() + '/trainmodel/net_rotrate_rotvec_crazyflie_blo_1.pkl','rb') as fp:
         params_blo = pickle.load(fp)
 
-    xscal = np.load('xscal_rotrate_rotvec_crazyflie_blo_1.npy')
-    uscal = np.load('uscal_rotrate_rotvec_crazyflie_blo_1.npy')
+    xscal = np.load(os.getcwd() + '/trainmodel/xscal_rotrate_rotvec_crazyflie_blo_1.npy')
+    uscal = np.load(os.getcwd() + '/trainmodel/uscal_rotrate_rotvec_crazyflie_blo_1.npy')
 
     kbf = defkbf(n,m,2)
     def basis_blo(x):
