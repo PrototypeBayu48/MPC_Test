@@ -93,9 +93,13 @@ class Quad_KoopmanMPC:
         #            1.0, 1.0, 1.0, 
         #            1.0, 1.0, 1.0)
         
+        #self.Q = ca.diagcat(20.0, 20.0, 20.0, 
+        #            20.0, 20.0, 20.0, 
+        #            0.05, 0.05, 0.05)
+
         self.Q = ca.diagcat(20.0, 20.0, 20.0, 
-                    20.0, 20.0, 20.0, 
-                    0.05, 0.05, 0.05)
+                    10.0, 10.0, 10.0, 
+                    0.02, 0.02, 0.02)
         
         self.QN = self.Q
         #self.QN = ca.diagcat(20.0, 20.0, 20.0, 
@@ -105,7 +109,8 @@ class Quad_KoopmanMPC:
         # controls weights matrix
         #self.R = ca.diagcat(5e-2, 5e-2, 5e-2, 5e-2)
         #self.R = ca.diagcat(1e-1, 1e-1, 1e-1, 1e-1)
-        self.R = ca.diagcat(1.0, 1.0, 1.0, 1.0)
+        #self.R = ca.diagcat(1.0, 1.0, 1.0, 1.0)
+        self.R = ca.diagcat(0.5, 0.5, 0.5, 0.5)
 
         self.RN = self.R
         #self.RN = ca.diagcat(0.0, 0.0, 0.0, 0.0)

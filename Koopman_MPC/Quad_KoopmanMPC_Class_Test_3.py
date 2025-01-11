@@ -16,76 +16,11 @@ import jax
 
 import pickle
 
-def simulate_quat(step_horizon, t0, state_init, u):
+from func_simulation import simulate_koop, simulate_quat
 
-    state_init = np.squeeze(state_init)
+from func_attconv import eultoquat, quattoeul
 
-    #u_ctrl = np.squeeze(u[:,1])
-    u_ctrl = np.squeeze(u)
-
-    s = 1/(np.linalg.norm(state_init[3:7]))
-
-    def lin_func(t, x):
-        xdot = [x[7], x[8], x[9],
-                0.5*(1/(np.linalg.norm(x[3:7])))*(u_ctrl[1]*x[6] - u_ctrl[2]*x[5] + u_ctrl[3]*x[4]),
-                0.5*(1/(np.linalg.norm(x[3:7])))*(u_ctrl[1]*x[5] + u_ctrl[2]*x[6] - u_ctrl[3]*x[3]),
-                0.5*(1/(np.linalg.norm(x[3:7])))*(-u_ctrl[1]*x[4] + u_ctrl[2]*x[3] + u_ctrl[3]*x[6]),
-                0.5*(1/(np.linalg.norm(x[3:7])))*(-u_ctrl[1]*x[3] - u_ctrl[2]*x[4] - u_ctrl[3]*x[5]),
-                2*(x[3]*x[5] + x[6]*x[4])*((u_ctrl[0]*0.1*max_thrust)/mass),
-                2*(x[4]*x[5] - x[6]*x[3])*((u_ctrl[0]*0.1*max_thrust)/mass),
-                (x[6]**2 - x[3]**2 - x[4]**2 + x[5]**2)*((u_ctrl[0]*0.1*max_thrust)/mass) - gravity]
-        return xdot
-
-    soln = solve_ivp(lin_func, [0.0, step_horizon], np.squeeze(state_init), t_eval = [step_horizon])
-    xnext = soln.y
-    next_state =  np.squeeze(xnext)
-
-    return next_state, u_ctrl
-
-def simulate_euler(step_horizon, t0, state_init_quat, u):
-
-    state_init = np.zeros(9)
-    state_init[:3] = state_init_quat[:3]
-    state_init[3:6] = Rot.from_quat(state_init_quat[3:7]).as_euler('xyz')
-    state_init[6:] = state_init_quat[7:]
-
-    u_ctrl = np.squeeze(u[:,1])
-    #u_ctrl = np.squeeze(u)
-
-    def lin_func(t, x):
-        xdot = [x[6], x[7], x[8], 
-                u_ctrl[1] + u_ctrl[2]*sin(x[3])*tan(x[4]) + u_ctrl[3]*cos(x[3])*tan(x[4]), 
-                u_ctrl[2]*cos(x[3]) - u_ctrl[3]*sin(x[3]), 
-                u_ctrl[2]*(sin(x[3])/cos(x[4])) + u_ctrl[3]*(cos(x[3])/cos(x[4])), 
-                ((cos(x[5])*sin(x[4])*cos(x[3]) + sin(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
-                ((sin(x[5])*sin(x[4])*cos(x[3]) - cos(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
-                -gravity + ((cos(x[4])*cos(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust)]
-        return xdot
-    soln = solve_ivp(lin_func, [0.0, step_horizon], np.squeeze(state_init), t_eval = [step_horizon])
-    xnext = soln.y
-    next_state_euler =  np.squeeze(xnext)
-
-    next_state_quat = np.zeros(10)
-    next_state_quat[:3] = next_state_euler[:3]
-    next_state_quat[3:7] = Rot.from_euler('xyz', next_state_euler[3:6]).as_quat()
-    next_state_quat[7:] = next_state_euler[6:]
-
-    return next_state_quat, u_ctrl
-
-def simulate_koop(state_init, u, koopmat, basis, xscal, uscal):
-
-    u_ctrl = np.squeeze(u[:,1])
-
-    u_ctrl_norm = (u_ctrl-uscal[:,1])/uscal[:,0]
-
-    state_init_norm = (state_init-xscal[:,1])/xscal[:,0]
-    state_init_z = basis(state_init_norm)
-
-    next_state_z = state_init_z + dt*(koopmat[0,:,:] + koopmat[1,:,:]*u_ctrl_norm[0] + koopmat[2,:,:]*u_ctrl_norm[1] + koopmat[3,:,:]*u_ctrl_norm[2] + koopmat[4,:,:]*u_ctrl_norm[3])@state_init_z
-
-    next_state_euler = (next_state_z[1:10]*xscal[:,0]) + xscal[:,1]
-
-    return next_state_euler, u_ctrl
+import os
 
 def debug_func(zstep, ustep, xdata):
 
@@ -100,7 +35,7 @@ def debug_func(zstep, ustep, xdata):
     xsim[0,:] = xstep[0,:]
 
     for n1 in np.arange(1,predlen):
-        [xsim[n1,:],u] = simulate_quat(dt, 0.0, xsim[n1-1,:], ustep[n1-1,:])
+        [xsim[n1,:],u] = simulate_quat(dt, 0.0, xsim[n1-1,:], ustep[n1-1,:], quadspec)
     
     tdata = dt*np.arange(datalen)
     tspan = tdata[-1] + dt*np.arange(predlen)
@@ -209,25 +144,25 @@ model = 'BLO'
 
 #debug = 0
 debug = 100
-
+    
 if model == 'BLO':
-    koopmat_blo = np.load('matrices_dataset_6_quat_blo_1.npy')
-    with open('net_dataset_6_quat_blo_1.pkl','rb') as fp:
+    koopmat_blo = np.load(os.getcwd() + '/trainmodel/matrices_dataset_7_quat_blo_1.npy')
+    with open(os.getcwd() + '/trainmodel/net_dataset_7_quat_blo_1.pkl','rb') as fp:
         params_blo = pickle.load(fp)
 
-    xscal = np.load('xscal_dataset_6_quat_blo_1.npy')
-    uscal = np.load('uscal_dataset_6_quat_blo_1.npy')
+    xscal = np.load(os.getcwd() + '/trainmodel/xscal_dataset_7_quat_blo_1.npy')
+    uscal = np.load(os.getcwd() + '/trainmodel/uscal_dataset_7_quat_blo_1.npy')
 
     kbf = defkbf(n,m,2)
     def basis_blo(x):
         return np.array(kbf.encoder(x,params_blo))
 elif model == 'Rottest':
-    koopmat_blo = np.load('matrices_rotrate_quat_crazyflie_blo_2.npy')
-    with open('net_rotrate_quat_crazyflie_blo_2.pkl','rb') as fp:
+    koopmat_blo = np.load(os.getcwd() + '/trainmodel/matrices_rotrate_quat_crazyflie_blo_1.npy')
+    with open(os.getcwd() + '/trainmodel/net_rotrate_quat_crazyflie_blo_1.pkl','rb') as fp:
         params_blo = pickle.load(fp)
 
-    xscal = np.load('xscal_rotrate_quat_crazyflie_blo_2.npy')
-    uscal = np.load('uscal_rotrate_quat_crazyflie_blo_2.npy')
+    xscal = np.load(os.getcwd() + '/trainmodel/xscal_rotrate_quat_crazyflie_blo_1.npy')
+    uscal = np.load(os.getcwd() + '/trainmodel/uscal_rotrate_quat_crazyflie_blo_1.npy')
 
     kbf = defkbf(n,m,2)
     def basis_blo(x):
@@ -268,7 +203,7 @@ rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_quat()
 #rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, -3*pi/4]).as_quat()
 #rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, ((-170/180)*pi)]).as_quat()
 
-xtarg = np.array([0.0, 0.0, 6.0,
+xtarg = np.array([0.0, 0.0, 4.0,
                   rtarg_quat[0], rtarg_quat[1], rtarg_quat[2], rtarg_quat[3],
                   0.0, 0.0, 0.0,])
 
@@ -293,10 +228,13 @@ for n1 in range(trajlen):
 
 t_targ = dt*np.arange(trajlen+1)
 
-u0 = np.array([10*(hover_thrust/max_thrust), 0.0, 0.0, 0.0])
+#u0 = np.array([10*(hover_thrust/max_thrust), 0.0, 0.0, 0.0])
+u0 = np.array([hover_thrust, 0.0, 0.0, 0.0])
 
-umax = np.array([10.0, 2.0, 2.0, 2.0])
-umin = np.array([0.0, -2.0, -2.0, -2.0])
+#umax = np.array([10.0, 2.0, 2.0, 2.0])
+umax = np.array([max_thrust, 4.0, 4.0, 4.0])
+
+umin = np.array([0.0, -4.0, -4.0, -4.0])
 
 MPC_blo = Quad_KoopmanMPC(dt, koopmat_blo, basis_blo, quadspec, (umax - uscal[:,1])/uscal[:,0], (umin - uscal[:,1])/uscal[:,0],xscal,uscal)
 
@@ -340,7 +278,7 @@ for n1 in np.arange(1,trajlen+1):
     #xarray[n1,:] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
     #uarray[n1-1,:] = u0
 
-    [xarray[n1,:], uarray[n1-1,:]] = simulate_quat(dt, 0.0, xarray[n1-1,:], control)
+    [xarray[n1,:], uarray[n1-1,:]] = simulate_quat(dt, 0.0, xarray[n1-1,:], control, quadspec)
     #[xarray[n1,:], uarray[n1-1,:]] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
 
     #u0 = uarray[n1-1,:]
@@ -367,15 +305,13 @@ print('Computation Time Standard Deviation = ' + str(np.std(tcomp)))
 tarray = dt*np.arange(0,iter+1)
 
 xarray_euler = np.zeros((iter+1,n-1))
-xarray_euler[:,:3] = xarray[:iter+1,:3]
-xarray_euler[:,6:] = xarray[:iter+1,7:]
 
 xarray = xarray[:iter+1,:]
 
 uarray = uarray[:iter,:]
 
 for n1 in range(iter+1):
-    xarray_euler[n1,3:6] = Rot.from_quat(xarray[n1,3:7]).as_euler('xyz')
+    xarray_euler[n1,:] = quattoeul(xarray[n1,:])
 
 xarray_quat_mag = np.zeros((iter+1))
 
@@ -425,7 +361,7 @@ plt.ylabel('Magnitude')
 plt.show()
 
 plt.figure()
-plt.stairs(uarray[:,0]*0.1*max_thrust, tarray, label='Thrust')
+plt.stairs(uarray[:,0], tarray, label='Thrust')
 plt.plot([tarray[0],tarray[-1]], hover_thrust*np.ones(2), '--', label='Hover Thrust')
 plt.plot([tarray[0],tarray[-1]], max_thrust*np.ones(2), '--', label='Max Thrust')
 plt.xlabel('Time (s)')

@@ -20,7 +20,7 @@ m = 4
 quadspec_iris = [2.02, 0.011, 0.015, 0.021, 0.26, 5.84e-6, 0.06*5.84e-6, 28.3]
 quadspec_crazyflie = [0.0336, 1.7e-5, 1.7e-5, 2.9e-5, 0.04, 3.1582e-10, 7.9379e-12, 0.057*9.81]
 
-quadspec = quadspec_iris
+quadspec = quadspec_crazyflie
 
 mass = quadspec[0]
 Ixx = quadspec[1]
@@ -49,7 +49,8 @@ dt = 0.02
 #dt = 0.05
 
 ti = 0.0
-tf = 10.0
+tf = 2.0
+#tf = 10.0
 
 tracking = 1
 mindist = 0
@@ -59,8 +60,12 @@ trajlen = int((tf-ti)/dt)
 nwp = 10
 
 waypoint = np.random.rand(nwp,3)
-waypoint[:,:2] = -5*np.ones((nwp,2)) + 10*waypoint[:,:2]
-waypoint[:,2] = 0.5 + 4.5*waypoint[:,2]
+
+#waypoint[:,:2] = -5*np.ones((nwp,2)) + 10*waypoint[:,:2]
+waypoint[:,:2] = -0.5*np.ones((nwp,2)) + 1*waypoint[:,:2]
+
+#waypoint[:,2] = 0.5 + 4.5*waypoint[:,2]
+waypoint[:,2] = 0.2 + 0.8*waypoint[:,2]
 
 initpt = waypoint[0,:]
 inityaw = np.array([0.0, 0.0, 0.0])

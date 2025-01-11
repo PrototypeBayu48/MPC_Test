@@ -65,9 +65,9 @@ def simulate_quat(step_horizon, t0, state_init, u_ctrl, quadspec):
                 0.5*(1/(np.linalg.norm(x[3:7])))*(u_ctrl[1]*x[5] + u_ctrl[2]*x[6] - u_ctrl[3]*x[3]),
                 0.5*(1/(np.linalg.norm(x[3:7])))*(-u_ctrl[1]*x[4] + u_ctrl[2]*x[3] + u_ctrl[3]*x[6]),
                 0.5*(1/(np.linalg.norm(x[3:7])))*(-u_ctrl[1]*x[3] - u_ctrl[2]*x[4] - u_ctrl[3]*x[5]),
-                2*(x[3]*x[5] + x[6]*x[4])*((u_ctrl[0]*0.1*max_thrust)/mass),
-                2*(x[4]*x[5] - x[6]*x[3])*((u_ctrl[0]*0.1*max_thrust)/mass),
-                (x[6]**2 - x[3]**2 - x[4]**2 + x[5]**2)*((u_ctrl[0]*0.1*max_thrust)/mass) - gravity]
+                2*(x[3]*x[5] + x[6]*x[4])*((u_ctrl[0])/mass),
+                2*(x[4]*x[5] - x[6]*x[3])*((u_ctrl[0])/mass),
+                (x[6]**2 - x[3]**2 - x[4]**2 + x[5]**2)*((u_ctrl[0])/mass) - gravity]
         return xdot
 
     soln = solve_ivp(lin_func, [0.0, step_horizon], np.squeeze(state_init), t_eval = [step_horizon])

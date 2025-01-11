@@ -395,7 +395,7 @@ class Quad_MPC_Full:
         #            0.1, 0.1, 0.1)
 
         self.Q = ca.diagcat(20.0, 20.0, 20.0, 
-                    1.0, 1.0, 1.0, 
+                    20.0, 20.0, 20.0, 
                     5.0, 5.0, 5.0,
                     0.1, 0.1, 0.1)
         
@@ -405,8 +405,9 @@ class Quad_MPC_Full:
         #            0.5, 0.5, 0.5)
 
         # controls weights matrix
-        #self.R = ca.diagcat(1e-16, 1e-16, 1e-16, 1e-16)
-        self.R = ca.diagcat(1e-10, 1e-10, 1e-10, 1e-10)
+        self.R = ca.diagcat(1e-16, 1e-16, 1e-16, 1e-16)
+        #self.R = ca.diagcat(1e-12, 1e-12, 1e-12, 1e-12)
+        #self.R = ca.diagcat(1e-10, 1e-10, 1e-10, 1e-10)
         #self.R = ca.diagcat(1e-8, 1e-8, 1e-8, 1e-8)
 
         self.RN = self.R
@@ -450,9 +451,9 @@ class Quad_MPC_Full:
                 R = self.R
             self.cost_fn = self.cost_fn \
                 + (st[:3] - P[self.n_states:self.n_states+3]).T @ self.Q[:3,:3] @ (st[:3] - P[self.n_states:self.n_states+3]) \
-                + Q[3,3]*(st[3]*P[16] - st[4]*P[15] + st[5]*P[14] - st[6]*P[13]).T @ (st[3]*P[16] - st[4]*P[15] + st[5]*P[14] - st[6]*P[13]) \
-                + Q[4,4]*(st[3]*P[15] + st[4]*P[16] - st[5]*P[13] - st[6]*P[13]).T @ (st[3]*P[15] + st[4]*P[16] - st[5]*P[13] - st[6]*P[13]) \
-                + Q[5,5]*(-st[3]*P[14] + st[4]*P[13] + st[5]*P[16] - st[6]*P[15]).T @ (-st[3]*P[14] + st[4]*P[13] + st[5]*P[16] - st[6]*P[15]) \
+                + Q[3,3]*(st[3]*P[19] - st[4]*P[18] + st[5]*P[17] - st[6]*P[16]).T @ (st[3]*P[19] - st[4]*P[18] + st[5]*P[17] - st[6]*P[16]) \
+                + Q[4,4]*(st[3]*P[18] + st[4]*P[19] - st[5]*P[16] - st[6]*P[16]).T @ (st[3]*P[18] + st[4]*P[19] - st[5]*P[16] - st[6]*P[16]) \
+                + Q[5,5]*(-st[3]*P[17] + st[4]*P[16] + st[5]*P[19] - st[6]*P[18]).T @ (-st[3]*P[17] + st[4]*P[16] + st[5]*P[19] - st[6]*P[18]) \
                 + (st[7:] - P[self.n_states+7:self.n_states+13]).T @ Q[6:,6:] @ (st[7:] - P[self.n_states+7:self.n_states+13]) \
                 + (con - P[self.n_states+13:]).T @ R @ (con - P[self.n_states+13:])
             st_next = self.X[:, k+1]

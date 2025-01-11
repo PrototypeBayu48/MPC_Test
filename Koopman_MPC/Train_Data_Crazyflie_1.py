@@ -17,7 +17,7 @@ from func_attconv import eultoquat, quattoeul
 quadspec_crazyflie = [0.0336, 1.7e-5, 1.7e-5, 2.9e-5, 0.04, 3.1582e-10, 7.9379e-12, 0.057*9.81]
 quadspec_iris = [2.02, 0.011, 0.015, 0.021, 0.26, 5.84e-6, 0.06*5.84e-6, 28.3]
 
-quadspec = quadspec_iris
+quadspec = quadspec_crazyflie
 
 n = 13
 m = 4
@@ -49,14 +49,14 @@ dt = 0.02
 #dt = 0.05
 
 ti = 0.0
-tf = 5.0
+tf = 2.0
 
 tracking = 1
 mindist = 0
 
 trajlen = int((tf-ti)/dt)
 
-nwp = 56
+nwp = 140
 
 nflight = 10
 
@@ -66,8 +66,8 @@ uarray_train = np.zeros((nflight, ((nwp-1)*trajlen), m))
 
 for m1 in range(nflight):
     waypoint = np.random.rand(nwp,3)
-    waypoint[:,:2] = -5.0*np.ones((nwp,2)) + 10.0*waypoint[:,:2]
-    waypoint[:,2] = 0.5*np.ones(nwp) + 9.5*waypoint[:,2]
+    waypoint[:,:2] = -0.5*np.ones((nwp,2)) + 1.0*waypoint[:,:2]
+    waypoint[:,2] = 0.1*np.ones(nwp) + 0.9*waypoint[:,2]
 
     initpt = waypoint[0,:]
     inityaw = np.array([0.0, 0.0, 0.0])
@@ -261,9 +261,9 @@ ax.set_ylabel('y, m')
 ax.set_zlabel('z, m')
 plt.show()
 
-np.save('x_quat_train_7', xarray_train)
-np.save('x_eul_train_7', xarray_euler_train)
-np.save('u_train_quad_7', uarray_train)
+np.save('crazyflie_x_quat_train_1', xarray_train)
+np.save('crazyflie_x_eul_train_1', xarray_euler_train)
+np.save('crazyflie_u_train_quad_1', uarray_train)
 
 
 
