@@ -16,7 +16,7 @@ import jax
 
 import pickle
 
-def simulate_koop(state_init, u_ctrl, koopmat, basis, xscal, uscal, dt):
+def simulate_koop(state_init, u_ctrl, koopmat, basis, xscal, uscal, dt, n):
 
     u_ctrl_norm = (u_ctrl-uscal[:,1])/uscal[:,0]
 
@@ -25,7 +25,7 @@ def simulate_koop(state_init, u_ctrl, koopmat, basis, xscal, uscal, dt):
 
     next_state_z = state_init_z + dt*(koopmat[0,:,:] + koopmat[1,:,:]*u_ctrl_norm[0] + koopmat[2,:,:]*u_ctrl_norm[1] + koopmat[3,:,:]*u_ctrl_norm[2] + koopmat[4,:,:]*u_ctrl_norm[3])@state_init_z
 
-    next_state_euler = (next_state_z[1:10]*xscal[:,0]) + xscal[:,1]
+    next_state_euler = (next_state_z[1:n+1]*xscal[:,0]) + xscal[:,1]
 
     return next_state_euler, u_ctrl
 
@@ -40,9 +40,9 @@ def simulate_euler(step_horizon, t0, state_init, u_ctrl, quadspec):
                 u_ctrl[1] + u_ctrl[2]*sin(x[3])*tan(x[4]) + u_ctrl[3]*cos(x[3])*tan(x[4]), 
                 u_ctrl[2]*cos(x[3]) - u_ctrl[3]*sin(x[3]), 
                 u_ctrl[2]*(sin(x[3])/cos(x[4])) + u_ctrl[3]*(cos(x[3])/cos(x[4])), 
-                ((cos(x[5])*sin(x[4])*cos(x[3]) + sin(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
-                ((sin(x[5])*sin(x[4])*cos(x[3]) - cos(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
-                -gravity + ((cos(x[4])*cos(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust)]
+                ((cos(x[5])*sin(x[4])*cos(x[3]) + sin(x[5])*sin(x[3]))/mass)*(u_ctrl[0]),
+                ((sin(x[5])*sin(x[4])*cos(x[3]) - cos(x[5])*sin(x[3]))/mass)*(u_ctrl[0]),
+                -gravity + ((cos(x[4])*cos(x[3]))/mass)*(u_ctrl[0])]
         return xdot
     
     soln = solve_ivp(lin_func, [0.0, step_horizon], np.squeeze(state_init), t_eval = [step_horizon])

@@ -1,7 +1,7 @@
 from time import time
 import casadi as ca
 import numpy as np
-from casadi import sin, cos, pi
+from casadi import sin, cos, tan, pi
 import matplotlib.pyplot as plt
 from simulation_code import simulate
 
@@ -21,7 +21,10 @@ def simulate_euler(step_horizon, t0, state_init_quat, u):
     u_ctrl = np.squeeze(u[:,1])
 
     def lin_func(t, x):
-        xdot = [x[6], x[7], x[8], u_ctrl[1] ,u_ctrl[2], u_ctrl[3],
+        xdot = [x[6], x[7], x[8], 
+                u_ctrl[1] + u_ctrl[2]*sin(x[3])*tan(x[4]) + u_ctrl[3]*cos(x[3])*tan(x[4]), 
+                u_ctrl[2]*cos(x[3]) - u_ctrl[3]*sin(x[3]), 
+                u_ctrl[2]*(sin(x[3])/cos(x[4])) + u_ctrl[3]*(cos(x[3])/cos(x[4])), 
                 ((cos(x[5])*sin(x[4])*cos(x[3]) + sin(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
                 ((sin(x[5])*sin(x[4])*cos(x[3]) - cos(x[5])*sin(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust),
                 -gravity + ((cos(x[4])*cos(x[3]))/mass)*(u_ctrl[0]*0.1*max_thrust)]
@@ -73,18 +76,20 @@ mindist = 0
 
 trajlen = int((tf-ti)/dt)
 
-rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_quat()
-#rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, 3*pi/2]).as_quat()
+#rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_quat()
+#rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, 3*pi/4]).as_quat()
+rinit_quat = Rot.from_euler('xyz', [0.0, 0.0, (175/180)*(pi)]).as_quat()
 
 xinit = np.array([0.0, 0.0, 4.0,
                   rinit_quat[0], rinit_quat[1], rinit_quat[2], rinit_quat[3],
                   0.0, 0.0, 0.0,])
 
-rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_quat()
+#rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_quat()
 #rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, pi/2]).as_quat()
-#rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, -3*pi/2]).as_quat()
+#rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, -3*pi/4]).as_quat()
+rtarg_quat = Rot.from_euler('xyz', [0.0, 0.0, -(175/180)*(pi)]).as_quat()
 
-xtarg = np.array([0.0, 0.0, 6.0,
+xtarg = np.array([2.0, 2.0, 6.0,
                   rtarg_quat[0], rtarg_quat[1], rtarg_quat[2], rtarg_quat[3],
                   0.0, 0.0, 0.0,])
 
@@ -171,6 +176,7 @@ uarray = uarray[:iter,:]
 for n1 in range(iter+1):
     xarray_euler[n1,3:6] = Rot.from_quat(xarray[n1,3:7]).as_euler('xyz')
 
+'''
 plt.figure()
 plt.plot(tarray, xarray_euler[:,0])
 plt.xlabel('Time (s)')
@@ -187,6 +193,22 @@ plt.figure()
 plt.plot(tarray, xarray_euler[:,2])
 plt.xlabel('Time (s)')
 plt.ylabel('z (m)')
+plt.show()
+'''
+
+fig1, ax1 = plt.subplots(3,sharex=True)
+for n1 in np.arange(3):
+    if n1 == 0:
+        ax1[n1].plot(tarray,xarray_euler[:,n1],'b-',label='Quaternion MPC Trajectory')
+        ax1[n1].plot(tarray,xarray_targ[:,n1],'c:',label='Target Trajectory')
+    else:
+        ax1[n1].plot(tarray,xarray_euler[:,n1],'b-')
+        ax1[n1].plot(tarray,xarray_targ[:,n1],'c:')
+ax1[0].set(ylabel='x (m)')
+ax1[1].set(ylabel='y (m)')
+ax1[2].set(ylabel='z (m)')
+fig1.legend()
+fig1.supxlabel('Time (s)')
 plt.show()
 
 plt.figure()

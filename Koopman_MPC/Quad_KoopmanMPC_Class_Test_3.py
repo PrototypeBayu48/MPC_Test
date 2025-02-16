@@ -167,6 +167,17 @@ elif model == 'Rottest':
     kbf = defkbf(n,m,2)
     def basis_blo(x):
         return np.array(kbf.encoder(x,params_blo))
+elif model == 'Crazyflie':
+    koopmat_blo = np.load(os.getcwd() + '/trainmodel/crazyflie_1_matrices_quat_blo_2.npy')
+    with open(os.getcwd() + '/trainmodel/crazyflie_1_net_quat_blo_2.pkl','rb') as fp:
+        params_blo = pickle.load(fp)
+
+    xscal = np.load(os.getcwd() + '/trainmodel/crazyflie_1_xscal_quat_blo_2.npy')
+    uscal = np.load(os.getcwd() + '/trainmodel/crazyflie_1_uscal_quat_blo_2.npy')
+
+    kbf = defkbf(n,m,2)
+    def basis_blo(x):
+        return np.array(kbf.encoder(x,params_blo))
     
 '''
 xtrain = np.load('x_quat_train_3.npy')

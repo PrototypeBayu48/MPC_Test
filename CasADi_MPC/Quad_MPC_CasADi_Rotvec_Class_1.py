@@ -1,0 +1,312 @@
+from time import time
+import casadi as ca
+import numpy as np
+from casadi import sin, cos, pi
+import matplotlib.pyplot as plt
+from simulation_code import simulate
+
+from scipy.spatial.transform import Rotation as Rot
+
+from scipy.integrate import solve_ivp
+
+from liecasadi import SO3Tangent
+
+import pypose as pp
+
+class Quad_MPC_Rotvec:
+    def __init__(self, dt):
+        self.n = 10
+        self.m = 4
+
+        self.mass = 2.02
+        self.Ixx = 0.011
+        self.Iyy = 0.015
+        self.Izz = 0.021
+        self.gravity = 9.81
+        self.l = 0.26
+        self.ct = 5.84e-6
+        self.cq = 0.06*self.ct
+
+        self.c1 = (self.Iyy - self.Izz)/self.Ixx
+        self.c2 = (self.Izz - self.Ixx)/self.Iyy
+        self.c3 = (self.Iyy - self.Ixx)/self.Izz
+
+        self.hover_thrust = self.mass*self.gravity
+        self.max_thrust = 28.3
+        self.min_thrust = 0.0
+
+        self.hover_w2 = (self.hover_thrust)/(4*self.ct)
+        self.max_w2 = (self.max_thrust)/(4*self.ct)
+        self.max_tx = self.ct*self.l*self.max_w2
+        self.max_ty = self.ct*self.l*self.max_w2
+        self.max_tz = 2*self.cq*self.max_w2
+
+        self.dt = dt                    # time between steps in seconds
+        self.N = 25                     # number of look ahead steps
+
+        # state symbolic variables
+        self.x = ca.SX.sym('x')
+        self.y = ca.SX.sym('y')
+        self.z = ca.SX.sym('z')
+        self.p_x = ca.SX.sym('p_x')
+        self.p_y = ca.SX.sym('p_y')
+        self.p_z = ca.SX.sym('p_z')
+        self.dx = ca.SX.sym('dx')
+        self.dy = ca.SX.sym('dy')
+        self.dz = ca.SX.sym('dz')
+        self.states = ca.vertcat(
+            self.x,
+            self.y,
+            self.z,
+            self.p_x,
+            self.p_y,
+            self.p_z,
+            self.dx,
+            self.dy,
+            self.dz
+        )
+        self.n_states = self.states.numel()
+
+        # control symbolic variables
+        self.Th = ca.SX.sym('Th')
+        self.omega_x = ca.SX.sym('omega_x')
+        self.omega_y = ca.SX.sym('omega_y')
+        self.omega_z = ca.SX.sym('omega_z')
+        self.controls = ca.vertcat(
+            self.Th,
+            self.omega_x,
+            self.omega_y,
+            self.omega_z
+        )
+        self.n_controls = self.controls.numel()
+
+        # matrix containing all states over all time steps +1 (each column is a state vector)
+        self.X = ca.SX.sym('X', self.n_states, self.N + 1)
+
+        # matrix containing all control actions over all time steps (each column is an action vector)
+        self.U = ca.SX.sym('U', self.n_controls, self.N)
+
+        # coloumn vector for storing initial state and target state
+        self.P = ca.SX.sym('P', self.n_states + self.n_states + self.n_controls)
+
+        # state weights matrix
+        self.Q = ca.diagcat(20.0, 20.0, 20.0, 
+                    1.0, 1.0, 1.0, 
+                    1.0, 1.0, 1.0)
+        
+        self.QN = self.Q
+        #self.QN = ca.diagcat(20.0, 20.0, 20.0, 
+        #            20.0, 20.0, 20.0, 
+        #            1.0, 1.0, 1.0)
+
+        # controls weights matrix
+        #self.R = ca.diagcat(5e-2, 5e-2, 5e-2, 5e-2)
+        #self.R = ca.diagcat(1e-1, 1e-1, 1e-1, 1e-1)
+        self.R = ca.diagcat(1.0, 1.0, 1.0, 1.0)
+        #self.R = ca.diagcat(0.2, 0.2, 0.2, 0.2)
+
+        #self.RN = self.R
+        self.RN = ca.diagcat(0.0, 0.0, 0.0, 0.0)
+
+        # discretization model
+        self.quad_RHS = ca.vertcat(
+            self.dx,
+            self.dy,
+            self.dz,
+            (self.omega_x)*( 1 - (1/6)*( (self.p_z**2) + (self.p_y**2)) ) + (self.omega_y)*( (-1/2)*(self.p_z) + (1/6)*(self.p_x*self.p_y) ) + (self.omega_z)*( (1/2)*(self.p_y) + (1/6)*(self.p_x*self.p_z) ),
+            (self.omega_x)*( (1/2)*(self.p_z) + (1/6)*(self.p_x*self.p_y) ) + (self.omega_y)*( 1 - (1/6)*( (self.p_x**2) + (self.p_z**2)) ) + (self.omega_z)*( (-1/2)*(self.p_x) + (1/6)*(self.p_y*self.p_z) ),
+            (self.omega_x)*( (-1/2)*(self.p_y) + (1/6)*(self.p_x*self.p_z) ) + (self.omega_y)*( (1/2)*(self.p_x) + (1/6)*(self.p_y*self.p_z) ) + (self.omega_z)*( 1 - (1/6)*( (self.p_x**2) + (self.p_y**2)) ),
+            ( (self.p_y) + (1/2)*(self.p_x*self.p_z) )*((self.Th*0.1*self.max_thrust)/self.mass),
+            ( - (self.p_x) + (1/2)*(self.p_y*self.p_z) )*((self.Th*0.1*self.max_thrust)/self.mass),
+            ( 1 - (1/2)*( (self.p_x**2) + (self.p_y**2)) )*((self.Th*0.1*self.max_thrust)/self.mass) - self.gravity
+        )
+
+        # maps controls from [va, vb, vc, vd].T to [vx, vy, omega].T
+        self.f = ca.Function('f', [self.states, self.controls], [self.quad_RHS])
+
+        self.cost_fn = 0  # cost function
+        self.g = self.X[:, 0] - self.P[:self.n_states]  # constraints in the equation
+
+        '''
+        # euler
+        for k in range(self.N):
+            st = self.X[:, k]
+            con = self.U[:, k]
+            if k == self.N - 1:
+                Q = self.QN
+            else:
+                Q = self.Q
+            P = self.P
+            if k == self.N - 1:
+                R = self.RN
+            else:
+                R = self.R
+            self.cost_fn = self.cost_fn \
+                + (st[:] - P[self.n_states:self.n_states+9]).T @ self.Q @ (st[:] - P[self.n_states:self.n_states+9]) \
+                + (con - P[self.n_states+9:]).T @ R @ (con - P[self.n_states+9:])
+            st_next = self.X[:, k+1]
+            k1 = self.f(st, con)
+            st_next_RK4 = st + (self.dt)*(k1)
+            self.g = ca.vertcat(self.g, st_next - st_next_RK4)
+        '''
+
+        for k in range(self.N):
+            st = self.X[:, k]
+            con = self.U[:, k]
+            if k == self.N - 1:
+                Q = self.QN
+            else:
+                Q = self.Q
+            P = self.P
+            if k == self.N - 1:
+                R = self.RN
+            else:
+                R = self.R
+
+            rot_state = SO3Tangent(st[3:6])
+            rot_ref = SO3Tangent(P[self.n_states+3:self.n_states+6])
+            error_rotvec = ((rot_ref.exp()) - (rot_state.exp())).vec
+
+            self.cost_fn = self.cost_fn \
+                + (st[:3] - P[self.n_states:self.n_states+3]).T @ self.Q[:3,:3] @ (st[:3] - P[self.n_states:self.n_states+3]) \
+                + (error_rotvec).T @ self.Q[3:6,3:6] @ (error_rotvec) \
+                + (st[6:] - P[self.n_states+6:self.n_states+9]).T @ self.Q[6:,6:] @ (st[6:] - P[self.n_states+6:self.n_states+9]) \
+                + (con - P[self.n_states+9:]).T @ R @ (con - P[self.n_states+9:])
+            st_next = self.X[:, k+1]
+            k1 = self.f(st, con)
+            st_next_RK4 = st + (self.dt)*(k1)
+            self.g = ca.vertcat(self.g, st_next - st_next_RK4)
+
+        self.OPT_variables = ca.vertcat(
+            self.X.reshape((-1, 1)),   # Example: 3x11 ---> 33x1 where 3=states, 11=N+1
+            self.U.reshape((-1, 1))
+        )
+        self.nlp_prob = {
+            'f': self.cost_fn,
+            'x': self.OPT_variables,
+            'g': self.g,
+            'p': P
+        }
+
+        self.opts = {
+            'ipopt': {
+                'max_iter': 2000,
+                'print_level': 0,
+                'acceptable_tol': 1e-8,
+                'acceptable_obj_change_tol': 1e-6,
+                'linear_solver': 'MA27'
+            },
+            'print_time': 0
+        }
+
+        self.solver = ca.nlpsol('solver', 'ipopt', self.nlp_prob, self.opts)
+
+        self.lbx = ca.DM.zeros((self.n_states*(self.N+1) + self.n_controls*self.N, 1))
+        self.ubx = ca.DM.zeros((self.n_states*(self.N+1) + self.n_controls*self.N, 1))
+
+        self.lbx[0: self.n_states*(self.N+1): self.n_states] = -ca.inf      # x lower bound
+        self.lbx[1: self.n_states*(self.N+1): self.n_states] = -ca.inf      # y lower bound
+        self.lbx[2: self.n_states*(self.N+1): self.n_states] = -ca.inf      # z lower bound
+        self.lbx[3: self.n_states*(self.N+1): self.n_states] = -ca.inf      # p_x lower bound
+        self.lbx[4: self.n_states*(self.N+1): self.n_states] = -ca.inf      # p_y lower bound
+        self.lbx[5: self.n_states*(self.N+1): self.n_states] = -ca.inf      # p_z lower bound
+        self.lbx[6: self.n_states*(self.N+1): self.n_states] = -ca.inf      # dx lower bound
+        self.lbx[7: self.n_states*(self.N+1): self.n_states] = -ca.inf      # dy lower bound
+        self.lbx[8: self.n_states*(self.N+1): self.n_states] = -ca.inf      # dz lower bound
+
+        self.ubx[0: self.n_states*(self.N+1): self.n_states] = ca.inf      # x upper bound
+        self.ubx[1: self.n_states*(self.N+1): self.n_states] = ca.inf      # y upper bound
+        self.ubx[2: self.n_states*(self.N+1): self.n_states] = ca.inf      # z upper bound
+        self.ubx[3: self.n_states*(self.N+1): self.n_states] = ca.inf      # p_x upper bound
+        self.ubx[4: self.n_states*(self.N+1): self.n_states] = ca.inf      # p_y upper bound
+        self.ubx[5: self.n_states*(self.N+1): self.n_states] = ca.inf      # p_z upper bound
+        self.ubx[6: self.n_states*(self.N+1): self.n_states] = ca.inf      # dx upper bound
+        self.ubx[7: self.n_states*(self.N+1): self.n_states] = ca.inf      # dy upper bound
+        self.ubx[8: self.n_states*(self.N+1): self.n_states] = ca.inf      # dz upper bound
+
+        self.lbx[self.n_states*(self.N+1): self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 0.0                # Th lower bound
+        self.lbx[self.n_states*(self.N+1) + 1: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = -2.0           # omega_x lower bound
+        self.lbx[self.n_states*(self.N+1) + 2: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = -2.0           # omega_y lower bound
+        self.lbx[self.n_states*(self.N+1) + 3: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = -2.0           # omega_z lower bound
+
+        self.ubx[self.n_states*(self.N+1): self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 10.0               # Th upper bound
+        self.ubx[self.n_states*(self.N+1) + 1: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 2.0            # omega_x upper bound
+        self.ubx[self.n_states*(self.N+1) + 2: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 2.0            # omega_y upper bound
+        self.ubx[self.n_states*(self.N+1) + 3: self.n_states*(self.N+1) + self.n_controls*self.N: self.n_controls] = 2.0            # omega_z upper bound
+
+
+        self.args = {
+            'lbg': ca.DM.zeros((self.n_states*(self.N+1), 1)),  # constraints lower bound
+            'ubg': ca.DM.zeros((self.n_states*(self.N+1), 1)),  # constraints upper bound
+            'lbx': self.lbx,
+            'ubx': self.ubx
+        }
+    
+    def DM2Arr(self, dm):
+        return np.array(dm.full())
+    
+    def ctrl_loop(self, state_init, state_target, ctrl_init):
+
+        # Control Setup
+
+        t0 = 0
+        state_init = ca.DM(state_init)          # initial state
+        state_target = ca.DM(state_target)      # target state
+
+        # xx = DM(state_init)
+        t = ca.DM(t0)
+
+        u0 = ca.repmat(ctrl_init, 1, self.N)            # initial control
+        X0 = ca.repmat(state_init, 1, self.N+1)         # initial state full
+
+
+        mpc_iter = 0
+        cat_states = self.DM2Arr(X0)
+        cat_controls = self.DM2Arr(u0[:, 0])
+        times = np.array([[0]])
+
+        # Control Loop
+
+        self.args['p'] = ca.vertcat(
+            state_init,     # current state
+            state_target,   # target state
+            ctrl_init       # reference control
+        )
+        # optimization variable current state
+        self.args['x0'] = ca.vertcat(
+            ca.reshape(X0, self.n_states*(self.N+1), 1),
+            ca.reshape(u0, self.n_controls*self.N, 1)
+        )
+
+        sol = self.solver(
+            x0=self.args['x0'],
+            lbx=self.args['lbx'],
+            ubx=self.args['ubx'],
+            lbg=self.args['lbg'],
+            ubg=self.args['ubg'],
+            p=self.args['p']
+        )
+
+        u = ca.reshape(sol['x'][self.n_states * (self.N + 1):], self.n_controls, self.N)
+        X0 = ca.reshape(sol['x'][: self.n_states * (self.N+1)], self.n_states, self.N+1)
+
+        cat_states = np.dstack((
+            cat_states,
+            self.DM2Arr(X0)
+        ))
+
+        cat_controls = np.vstack((
+            cat_controls,
+            self.DM2Arr(u[:, 0])
+        ))
+        t = np.vstack((
+            t,
+            t0
+        ))
+
+        #state_new = self.simulate(self.dt, t0, state_init, u)
+
+        return np.squeeze(u[:,1])
+
+
+

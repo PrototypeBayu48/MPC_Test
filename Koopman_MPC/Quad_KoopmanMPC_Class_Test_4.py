@@ -147,28 +147,42 @@ dt = 0.02
 #dt = 0.05
 
 model = 'BLO'
+dataver = '6'
+modelver = '1'
 
 #debug = 20
+#debug = 50
 debug = 100
 
 if model == 'BLO':
-    koopmat_blo = np.load(os.getcwd() + '/trainmodel/matrices_dataset_6_rotvec_blo_1.npy')
-    with open(os.getcwd() + '/trainmodel/net_dataset_6_rotvec_blo_1.pkl','rb') as fp:
+    koopmat_blo = np.load(os.getcwd() + '/trainmodel/matrices_dataset_' + dataver + '_rotvec_blo_' + modelver + '.npy')
+    with open(os.getcwd() + '/trainmodel/net_dataset_' + dataver + '_rotvec_blo_' + modelver + '.pkl','rb') as fp:
         params_blo = pickle.load(fp)
 
-    xscal = np.load(os.getcwd() + '/trainmodel/xscal_dataset_6_rotvec_blo_1.npy')
-    uscal = np.load(os.getcwd() + '/trainmodel/uscal_dataset_6_rotvec_blo_1.npy')
+    xscal = np.load(os.getcwd() + '/trainmodel/xscal_dataset_' + dataver + '_rotvec_blo_' + modelver + '.npy')
+    uscal = np.load(os.getcwd() + '/trainmodel/uscal_dataset_' + dataver + '_rotvec_blo_' + modelver + '.npy')
 
     kbf = defkbf(n,m,2)
     def basis_blo(x):
         return np.array(kbf.encoder(x,params_blo))
 elif model == 'Rottest':
-    koopmat_blo = np.load(os.getcwd() + '/trainmodel/matrices_rotrate_rotvec_crazyflie_blo_1.npy')
-    with open(os.getcwd() + '/trainmodel/net_rotrate_rotvec_crazyflie_blo_1.pkl','rb') as fp:
+    koopmat_blo = np.load(os.getcwd() + '/trainmodel/matrices_rotrate_rotvec_crazyflie_blo_' + modelver + '.npy')
+    with open(os.getcwd() + '/trainmodel/net_rotrate_rotvec_crazyflie_blo_' + modelver + '.pkl','rb') as fp:
         params_blo = pickle.load(fp)
 
-    xscal = np.load(os.getcwd() + '/trainmodel/xscal_rotrate_rotvec_crazyflie_blo_1.npy')
-    uscal = np.load(os.getcwd() + '/trainmodel/uscal_rotrate_rotvec_crazyflie_blo_1.npy')
+    xscal = np.load(os.getcwd() + '/trainmodel/xscal_rotrate_rotvec_crazyflie_blo_' + modelver + '.npy')
+    uscal = np.load(os.getcwd() + '/trainmodel/uscal_rotrate_rotvec_crazyflie_blo_' + modelver + '.npy')
+
+    kbf = defkbf(n,m,2)
+    def basis_blo(x):
+        return np.array(kbf.encoder(x,params_blo))
+elif model == 'Crazyflie':
+    koopmat_blo = np.load(os.getcwd() + '/trainmodel/crazyflie_' + dataver + '_matrices_rotvec_blo_' + modelver + '.npy')
+    with open(os.getcwd() + '/trainmodel/crazyflie_' + dataver + '_net_rotvec_blo_' + modelver + '.pkl','rb') as fp:
+        params_blo = pickle.load(fp)
+
+    xscal = np.load(os.getcwd() + '/trainmodel/crazyflie_' + dataver + '_xscal_rotvec_blo_' + modelver + '.npy')
+    uscal = np.load(os.getcwd() + '/trainmodel/crazyflie_' + dataver + '_uscal_rotvec_blo_' + modelver + '.npy')
 
     kbf = defkbf(n,m,2)
     def basis_blo(x):
@@ -177,9 +191,9 @@ elif model == 'Rottest':
 # Define Trajectory
 
 ti = 0.0
-#tf = 4.0
+tf = 4.0
 #tf = 8.0
-tf = 10.0
+#tf = 10.0
 
 tracking = 1
 mindist = 0
@@ -190,11 +204,12 @@ rinit_rotvec = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_rotvec()
 #rinit_rotvec = Rot.from_euler('xyz', [0.0, 0.0, 3*pi/4]).as_rotvec()
 #rinit_rotvec = Rot.from_euler('xyz', [0.0, 0.0, ((170/180)*pi)]).as_rotvec()
 
-xinit = np.array([0.0, 0.0, 2.0,
+xinit = np.array([0.0, 0.0, 4.0,
                   rinit_rotvec[0], rinit_rotvec[1], rinit_rotvec[2],
                   0.0, 0.0, 0.0,])
 
 rtarg_rotvec = Rot.from_euler('xyz', [0.0, 0.0, 0.0]).as_rotvec()
+#rtarg_rotvec = Rot.from_euler('xyz', [0.0, 0.0, pi/8]).as_rotvec()
 #rtarg_rotvec = Rot.from_euler('xyz', [0.0, 0.0, pi/4]).as_rotvec()
 #rtarg_rotvec = Rot.from_euler('xyz', [0.0, 0.0, pi/2]).as_rotvec()
 #rtarg_rotvec = Rot.from_euler('xyz', [0.0, 0.0, -3*pi/4]).as_rotvec()
@@ -226,8 +241,11 @@ for n1 in range(trajlen):
 t_targ = dt*np.arange(trajlen+1)
 
 u0 = np.array([10*(hover_thrust/max_thrust), 0.0, 0.0, 0.0])
+#u0 = np.array([hover_thrust, 0.0, 0.0, 0.0])
 
 umax = np.array([10.0, 2.0, 2.0, 2.0])
+#umax = np.array([max_thrust, 2.0, 2.0, 2.0])
+
 umin = np.array([0.0, -2.0, -2.0, -2.0])
 
 MPC_blo = Quad_KoopmanMPC_RotVec(dt, koopmat_blo, basis_blo, quadspec, (umax - uscal[:,1])/uscal[:,0], (umin - uscal[:,1])/uscal[:,0],xscal,uscal)
@@ -267,6 +285,8 @@ for n1 in np.arange(1,trajlen+1):
     #control = np.zeros((m,2))
     #control[:,1] = u0
     control =  u0
+
+    control[0] = control[0]*0.1*max_thrust
 
     #xarray[n1,:] = MPC.simulate(dt, 0.0, xarray[n1-1,:], control)
     #xarray[n1,:] = simulate_euler(dt, 0.0, xarray[n1-1,:], control)
@@ -347,7 +367,7 @@ plt.show()
 '''
 
 plt.figure()
-plt.stairs(uarray[:,0]*0.1*max_thrust, tarray, label='Thrust')
+plt.stairs(uarray[:,0], tarray, label='Thrust')
 plt.plot([tarray[0],tarray[-1]], hover_thrust*np.ones(2), '--', label='Hover Thrust')
 plt.plot([tarray[0],tarray[-1]], max_thrust*np.ones(2), '--', label='Max Thrust')
 plt.xlabel('Time (s)')

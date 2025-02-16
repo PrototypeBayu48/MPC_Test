@@ -6,8 +6,6 @@ import numpy as np
 import optax
 import scipy.integrate as spi
 
-from koopman_core.learning import KoopDnn_modified, KoopmanNetCtrl
-
 from Disc_func_1 import fit_model, plt_hist
 
 from Cont_func_1 import CKBF_STK, make_slo_loss
@@ -34,49 +32,6 @@ def reshape_sw(olddata,newlen,dim):
             iter = iter + 1
             
     return newdata
-
-def KoopNetfunc(t_val,x_train,x_val,u_train,u_val,net_params):
-    
-    if len(u_train[0,:,0]) == len(x_train[0,:,0]):
-        u_train = u_train[:,:-1,:]
-        u_val = u_val[:,:-1,:]
-
-    n_traj_train = len(x_train[:,0,0])
-    n_traj_val = len(x_val[:,0,0])
-
-    net = KoopmanNetCtrl(net_params)
-    model_koop_dnn = KoopDnn_modified(net)
-    model_koop_dnn.set_datasets(x_train, np.tile(t_val,(n_traj_train,1)), u_train=u_train, x_val=x_val, u_val=u_val, t_val=np.tile(t_val,(n_traj_val,1)))
-    model_koop_dnn.model_pipeline(net_params)
-    model_koop_dnn.construct_koopman_model()
-
-    train_loss = [l[0] for l in model_koop_dnn.train_loss_hist]
-    train_pred_loss = [l[1] for l in model_koop_dnn.train_loss_hist]
-    train_lin_loss = [l[2] for l in model_koop_dnn.train_loss_hist]
-    val_loss = [l[0] for l in model_koop_dnn.val_loss_hist]
-    val_pred_loss = [l[1] for l in model_koop_dnn.val_loss_hist]
-    val_lin_loss = [l[2] for l in model_koop_dnn.val_loss_hist]
-    epochs = np.arange(0, net_params['epochs'])
-
-    plt.figure(figsize=(15,8))
-    plt.plot(epochs, train_loss, color='tab:orange', label='Training loss')
-    plt.plot(epochs, train_pred_loss, '--', color='tab:orange', label='Training prediction loss')
-    plt.plot(epochs, train_lin_loss, ':', color='tab:orange', label='Training linear loss')
-    plt.plot(epochs, val_loss, color='tab:blue', label='Validation loss')
-    plt.plot(epochs, val_pred_loss, '--', color='tab:blue', label='Validation prediction loss')
-    plt.plot(epochs, val_lin_loss, ':', color='tab:blue', label='Validation linear loss')
-    plt.legend()
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.yscale('log')
-    plt.show()
-
-    A_koop = np.array(model_koop_dnn.A, dtype=float)
-    B_koop = np.array(model_koop_dnn.B, dtype=float)
-    C_koop = np.array(model_koop_dnn.C, dtype=float)
-    basis_koop = model_koop_dnn.basis_encode
-
-    return A_koop,B_koop,basis_koop
 
 def BLOfunc(t_train,x_train,u_train,net_params,disc = 0,len_sw = 0):
     
@@ -351,3 +306,6 @@ def BLOdiscfunc_save(t_train,x_train,u_train,net_params):
         B_blo[n1,:,:] = Atotal[:,(nz*y1):(nz*(y1+1))]
 
     return A_blo,B_blo,params,hist
+
+
+

@@ -39,7 +39,7 @@ class Quad_MPC:
         self.max_tz = 2*self.cq*self.max_w2
 
         self.dt = dt                    # time between steps in seconds
-        self.N = 15                     # number of look ahead steps
+        self.N = 25                     # number of look ahead steps
 
         # state symbolic variables
         self.x = ca.SX.sym('x')
